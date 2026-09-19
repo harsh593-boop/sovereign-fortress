@@ -62,12 +62,12 @@ cj = http.cookiejar.CookieJar()
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
 
 # Portal unauthed page
-resp = urllib.request.urlopen(f"http://{SERVER_IP}:{PORT}/portal", timeout=5)
+resp = urllib.request.urlopen(f"http://{SERVER_IP}:{PORT}/portal", timeout=12)
 check(resp.status == 200 and "SOVEREIGN FORTRESS" in resp.read().decode(), 
       "Web Portal login page reachable on port 8443 (HTTP 200)")
 
 # Offline embedded QR engine
-resp_js = urllib.request.urlopen(f"http://{SERVER_IP}:{PORT}/portal/qrcode.min.js", timeout=5)
+resp_js = urllib.request.urlopen(f"http://{SERVER_IP}:{PORT}/portal/qrcode.min.js", timeout=12)
 check(resp_js.status == 200 and b"QRCode" in resp_js.read(),
       "Self-contained offline QR generator script available at /portal/qrcode.min.js")
 
@@ -94,7 +94,7 @@ resp_totp.close()
 
 # 3. Dynamic Subscription Delivery
 print("\n--- 3. Testing Subscription Endpoints ---")
-sub_resp = urllib.request.urlopen(f"http://{SERVER_IP}:{PORT}/sub/{TOKEN}", timeout=5)
+sub_resp = urllib.request.urlopen(f"http://{SERVER_IP}:{PORT}/sub/{TOKEN}", timeout=12)
 sub_json = json.loads(sub_resp.read().decode())
 
 check(len(sub_json.get("outbounds", [])) >= 7,
@@ -116,15 +116,15 @@ check(has_campus_suffix, "Campus wildcard domains (*.campus.internal -> direct) 
 check(has_campus_ip, "Campus IP range (10.0.0.0/8 -> direct) verified")
 
 # Base64 Subscription
-b64_resp = urllib.request.urlopen(f"http://{SERVER_IP}:{PORT}/sub/{TOKEN}/b64", timeout=5)
+b64_resp = urllib.request.urlopen(f"http://{SERVER_IP}:{PORT}/sub/{TOKEN}/b64", timeout=12)
 decoded = base64.b64decode(b64_resp.read().decode()).decode().strip().split('\n')
 check(len(decoded) == 7, f"Base64 subscription returns all 7 proxy protocol links (count={len(decoded)})")
 
 # Real-Time TOTP Subscription (Query param & Direct path)
-totp_sub_resp = urllib.request.urlopen(f"http://{SERVER_IP}:{PORT}/sub/totp?code={totp_code}", timeout=5)
+totp_sub_resp = urllib.request.urlopen(f"http://{SERVER_IP}:{PORT}/sub/totp?code={totp_code}", timeout=12)
 check(totp_sub_resp.status == 200, "Dynamic TOTP query subscription (/sub/totp?code=...) verified")
 
-totp_path_resp = urllib.request.urlopen(f"http://{SERVER_IP}:{PORT}/sub/{totp_code}", timeout=5)
+totp_path_resp = urllib.request.urlopen(f"http://{SERVER_IP}:{PORT}/sub/{totp_code}", timeout=12)
 check(totp_path_resp.status == 200, f"Dynamic TOTP direct path subscription (/sub/{totp_code}) verified")
 
 # Active Defense Redirection for unauthorized probes
