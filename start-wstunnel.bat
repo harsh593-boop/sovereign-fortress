@@ -30,12 +30,12 @@ if not exist wstunnel.exe (
 )
 
 echo [*] Starting wstunnel TCP forwarder...
-echo [*] Local UDP: 127.0.0.1:51820 -^> Remote TCP: wss://%SERVER_IP%:8080 (Camouflage: gateway.icloud.com)
+echo [*] Local UDP: 127.0.0.1:51820 -> Remote TCP: wss://%SERVER_IP%:8080 (Camouflage: gateway.icloud.com)
 echo [*] Activate WireGuard using profile: fortress-wireguard-tcp.conf
 echo.
 echo Press Ctrl+C to stop the tunnel.
 echo.
 
-wstunnel.exe client -L udp://127.0.0.1:51820:127.0.0.1:51820 --tls-sni gateway.icloud.com --tls-verify-certificate false wss://%SERVER_IP%:8080
+wstunnel.exe client -L udp://127.0.0.1:51820:127.0.0.1:51820 --tls-sni-override gateway.icloud.com wss://%SERVER_IP%:8080
 
 pause

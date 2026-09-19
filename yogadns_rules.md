@@ -69,8 +69,8 @@ Cloudflare WARP is a single, monolithic, proprietary client. It bundles its own 
 To achieve the speed of Sovereign Fortress VPN, the custom DoH blocking of NextDNS, and instant access to campus intranet:
 
 ### Step 1: Fix Sing-box TUN Configuration (Already Applied in Repository)
-In your Sing-box client profile (`fortress-traffic-only.json`):
-1. **Disable `strict_route`**: Set `"strict_route": false`. This prevents the WFP kill-switch from blocking YogaDNS.
+In your Sing-box client profile (`fortress-traffic-only.json` and `fortress-full-tunnel.json`):
+1. **Disable `strict_route`**: Set `"strict_route": false`. This prevents the WFP kill-switch from blocking YogaDNS in both Full Traffic and Split Mode.
 2. **Add `route_exclude_address`**: Explicitly exempt LAN CIDRs from being intercepted by the TUN driver:
    ```json
    "inbounds": [

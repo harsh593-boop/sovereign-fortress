@@ -60,12 +60,12 @@ pin_param = f"&pinSHA256={PIN_SHA256}" if PIN_SHA256 else ""
 
 PROTOCOLS = [
     {
-        "name": "auto-fastest (Latency Balancer)",
+        "name": "auto-fastest",
         "port": "Auto",
         "proto": "none",
         "port_num": 0,
-        "badge": "Lowest-Ping Auto Detour",
-        "desc": "Benchmarks latency to all active proxies and automatically detours to lowest-ping route (labeled 'lowest' Balancer in Hiddify).",
+        "badge": "Lowest-Ping Auto Balancer",
+        "desc": "[Lowest-Latency Balancer] — Automatically measures latency to all proxies and detours to the lowest-ping connection (labeled 'lowest' Balancer in Hiddify).",
         "link": f"{SUB_URL}"
     },
     {
@@ -73,8 +73,8 @@ PROTOCOLS = [
         "port": "TCP 443",
         "proto": "tcp",
         "port_num": 443,
-        "badge": "GFW / FortiGate Slayer",
-        "desc": f"Camouflage: {REALITY_SNI}. Active probers without Reality auth keys are detoured to Apple CDN edge.",
+        "badge": "DPI & Campus Firewall Slayer",
+        "desc": "[DPI & Campus Firewall Slayer] — Primary weapon on strict campus Wi-Fi. Masks traffic as Apple iCloud CDN; active probes are forwarded to Apple.",
         "link": f"vless://{UUID}@{SERVER_IP}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni={REALITY_SNI}&fp=chrome&pbk={REALITY_PUBKEY}&sid={REALITY_SHORTID}&type=tcp&headerType=none#Fortress-Reality-TCP"
     },
     {
@@ -82,8 +82,8 @@ PROTOCOLS = [
         "port": "UDP 9444",
         "proto": "udp",
         "port_num": 9444,
-        "badge": "Extreme Stealth QUIC Scrambler",
-        "desc": "ChaCha20 XOR full-packet header scrambling with BLAKE3 KDF. Bypasses deep packet inspection.",
+        "badge": "Scrambled QUIC Anti-Throttling",
+        "desc": "[Scrambled QUIC - Anti-Throttling] — ChaCha20 XOR packet header scrambler. Use when campus firewall throttles or drops standard QUIC/UDP.",
         "link": f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:9444?sni={REALITY_SNI}&alpn=h3&obfs=salamander&obfs-password={SALAMANDER_PASS}{pin_param}#Fortress-Hysteria2-Salamander"
     },
     {
@@ -91,8 +91,8 @@ PROTOCOLS = [
         "port": "UDP 8443",
         "proto": "udp",
         "port_num": 8443,
-        "badge": "Brutal BBR / Maximum Bandwidth",
-        "desc": "Aggressive congestion control designed for lossy campus Wi-Fi. Delivers gigabit throughput.",
+        "badge": "Brutal BBR Maximum Speed 4K",
+        "desc": "[Brutal BBR - Maximum Speed 4K] — Aggressive congestion control designed for lossy campus Wi-Fi. Delivers gigabit throughput for video and downloads.",
         "link": f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:8443?sni={REALITY_SNI}&alpn=h3{pin_param}#Fortress-Hysteria2-Standard"
     },
     {
@@ -100,9 +100,9 @@ PROTOCOLS = [
         "port": "UDP 9443",
         "proto": "udp",
         "port_num": 9443,
-        "badge": "0-RTT Rapid Mobile Roaming",
-        "desc": "RFC 9000 QUIC protocol with zero handshake delay when switching Wi-Fi access points.",
-        "link": f"tuic://{UUID}:{HY2_PASSWORD}@{SERVER_IP}:9443?congestion_control=bbr&alpn=h3&sni={REALITY_SNI}#Fortress-TUIC5-UDP"
+        "badge": "0-RTT Fast Mobile Roaming",
+        "desc": "[0-RTT Fast Mobile Roaming] — Zero handshake latency when switching between campus Wi-Fi APs or mobile data on Android.",
+        "link": f"tuic://{UUID}:{HY2_PASSWORD}@{SERVER_IP}:9443?congestion_control=bbr&alpn=h3&sni={REALITY_SNI}{pin_param}#Fortress-TUIC5-UDP"
     },
     {
         "name": "Fortress-Shadowsocks2022",
@@ -110,7 +110,7 @@ PROTOCOLS = [
         "proto": "tcp",
         "port_num": 10443,
         "badge": "Ultra-Low Battery AEAD",
-        "desc": "2022-blake3-aes-256-gcm cipher with variable-length padding against entropy analysis.",
+        "desc": "[Ultra-Low Battery AEAD] — Minimal CPU overhead and battery consumption on mobile (2022-blake3-aes-256-gcm).",
         "link": f"ss://MjAyMi1ibGFrZTMtYWVzLTI1Ni1nY206{SS_PASSWORD}@{SERVER_IP}:10443#Fortress-Shadowsocks2022"
     },
     {
@@ -118,8 +118,8 @@ PROTOCOLS = [
         "port": "TCP 8080",
         "proto": "tcp",
         "port_num": 8080,
-        "badge": "WSTunnel TLS 1.3",
-        "desc": "Encapsulates WireGuard inside HTTPS WebSockets to bypass total UDP blocks.",
+        "badge": "Captive Portal & TCP Slayer",
+        "desc": "[Captive Portal & Strict TCP Slayer] — Wraps WireGuard inside HTTPS WebSockets (wstunnel) to bypass captive portals blocking UDP.",
         "link": f"wstunnel://{SERVER_IP}:8080"
     },
     {
@@ -127,8 +127,8 @@ PROTOCOLS = [
         "port": "UDP 51820",
         "proto": "udp",
         "port_num": 51820,
-        "badge": "Linux Kernel Line-Rate",
-        "desc": "Standard kernel-level ChaCha20-Poly1305 tunnel for high-speed unrestricted connections.",
+        "badge": "Direct Kernel Line-Rate",
+        "desc": "[Direct Kernel Line-Rate] — Direct Linux kernel ChaCha20-Poly1305 processing for high-speed unrestricted LAN / WAN.",
         "link": f"wg://{SERVER_IP}:51820"
     }
 ]
@@ -281,7 +281,7 @@ class SovereignApp(tk.Tk):
                                  command=lambda l=proto["link"]: self.copy_text(l))
             copy_btn.pack(side="left", padx=(0, 6))
 
-            if proto["name"] == "WireGuard over TCP":
+            if "WireGuard over TCP" in proto["name"]:
                 run_btn = tk.Button(bot_row, text="▶ Run WSTunnel", bg="#1e293b", fg="#34d399",
                                     activebackground="#334155", activeforeground="#34d399",
                                     font=("Segoe UI", 8, "bold"), relief="flat", padx=8, pady=2, cursor="hand2",
@@ -305,7 +305,7 @@ class SovereignApp(tk.Tk):
                 continue
 
             if ptype == "none":
-                self.after(0, lambda l=lbl: l.config(text="BALANCER ACTIVE", foreground="#34d399"))
+                self.after(0, lambda l=lbl: l.config(text="AUTO-FASTEST ('lowest' in Hiddify)", foreground="#34d399"))
                 continue
 
             lat = self._measure_latency(SERVER_IP, port, ptype)

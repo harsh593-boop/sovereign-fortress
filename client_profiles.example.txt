@@ -86,7 +86,7 @@ hysteria2://<YOUR_HYSTERIA2_PASSWORD>@<YOUR_SERVER_IP>:9444?sni=gateway.icloud.c
 hysteria2://<YOUR_HYSTERIA2_PASSWORD>@<YOUR_SERVER_IP>:8443?sni=gateway.icloud.com&alpn=h3&pinSHA256=<YOUR_CERT_PIN_SHA256>#Fortress-Hysteria2-Standard
 
 [Protocol 4: TUIC v5 UDP Port 9443 - 0-RTT Rapid Mobile Reconnect]
-tuic://<YOUR_UUID>:<YOUR_HYSTERIA2_PASSWORD>@<YOUR_SERVER_IP>:9443?congestion_control=bbr&alpn=h3&sni=gateway.icloud.com#Fortress-TUIC5-UDP
+tuic://<YOUR_UUID>:<YOUR_HYSTERIA2_PASSWORD>@<YOUR_SERVER_IP>:9443?congestion_control=bbr&alpn=h3&sni=gateway.icloud.com&pinSHA256=<YOUR_CERT_PIN_SHA256>#Fortress-TUIC5-UDP
 
 [Protocol 5: Shadowsocks-2022 TCP/UDP Port 10443 - AEAD Anti-Probing Proxy]
 ss://MjAyMi1ibGFrZTMtYWVzLTI1Ni1nY206<YOUR_SHADOWSOCKS_KEY>@<YOUR_SERVER_IP>:10443#Fortress-Shadowsocks2022

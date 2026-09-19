@@ -58,12 +58,13 @@
       "tag": "proxy",
       "outbounds": [
         "auto-fastest",
-        "Fortress-Reality-TCP",
-        "Fortress-Hysteria2-Salamander",
-        "Fortress-Hysteria2-Standard",
-        "Fortress-TUIC5-UDP",
-        "Fortress-Shadowsocks2022",
-        "Fortress-WireGuard-Native"
+        "Fortress-Reality-TCP [DPI & Campus Firewall Slayer]",
+        "Fortress-Hysteria2-Salamander [Scrambled QUIC Anti-Throttling]",
+        "Fortress-Hysteria2-Standard [Brutal BBR Maximum 4K]",
+        "Fortress-TUIC5 [0-RTT Fast Mobile Roaming]",
+        "Fortress-Shadowsocks2022 [Ultra-Low Battery AEAD]",
+        "Fortress-WireGuard-Native [Direct Kernel Line-Rate]",
+        "Fortress-WireGuard-TCP [Captive Portal & Strict TCP]"
       ],
       "default": "auto-fastest"
     },
@@ -71,12 +72,13 @@
       "type": "urltest",
       "tag": "auto-fastest",
       "outbounds": [
-        "Fortress-Reality-TCP",
-        "Fortress-Hysteria2-Salamander",
-        "Fortress-Hysteria2-Standard",
-        "Fortress-TUIC5-UDP",
-        "Fortress-Shadowsocks2022",
-        "Fortress-WireGuard-Native"
+        "Fortress-Reality-TCP [DPI & Campus Firewall Slayer]",
+        "Fortress-Hysteria2-Salamander [Scrambled QUIC Anti-Throttling]",
+        "Fortress-Hysteria2-Standard [Brutal BBR Maximum 4K]",
+        "Fortress-TUIC5 [0-RTT Fast Mobile Roaming]",
+        "Fortress-Shadowsocks2022 [Ultra-Low Battery AEAD]",
+        "Fortress-WireGuard-Native [Direct Kernel Line-Rate]",
+        "Fortress-WireGuard-TCP [Captive Portal & Strict TCP]"
       ],
       "url": "https://www.google.com/generate_204",
       "interval": "3m",
@@ -84,7 +86,7 @@
     },
     {
       "type": "vless",
-      "tag": "Fortress-Reality-TCP",
+      "tag": "Fortress-Reality-TCP [DPI & Campus Firewall Slayer]",
       "server": "<YOUR_SERVER_IP>",
       "server_port": 443,
       "uuid": "<YOUR_CLIENT_UUID>",
@@ -105,7 +107,7 @@
     },
     {
       "type": "hysteria2",
-      "tag": "Fortress-Hysteria2-Salamander",
+      "tag": "Fortress-Hysteria2-Salamander [Scrambled QUIC Anti-Throttling]",
       "server": "<YOUR_SERVER_IP>",
       "server_port": 9444,
       "password": "<YOUR_HYSTERIA2_PASSWORD>",
@@ -116,24 +118,30 @@
       "tls": {
         "enabled": true,
         "server_name": "gateway.icloud.com",
-        "alpn": ["h3"]
+        "alpn": ["h3"],
+        "certificate": [
+          "<YOUR_CA_CERT_PEM>"
+        ]
       }
     },
     {
       "type": "hysteria2",
-      "tag": "Fortress-Hysteria2-Standard",
+      "tag": "Fortress-Hysteria2-Standard [Brutal BBR Maximum 4K]",
       "server": "<YOUR_SERVER_IP>",
       "server_port": 8443,
       "password": "<YOUR_HYSTERIA2_PASSWORD>",
       "tls": {
         "enabled": true,
         "server_name": "gateway.icloud.com",
-        "alpn": ["h3"]
+        "alpn": ["h3"],
+        "certificate": [
+          "<YOUR_CA_CERT_PEM>"
+        ]
       }
     },
     {
       "type": "tuic",
-      "tag": "Fortress-TUIC5-UDP",
+      "tag": "Fortress-TUIC5 [0-RTT Fast Mobile Roaming]",
       "server": "<YOUR_SERVER_IP>",
       "server_port": 9443,
       "uuid": "<YOUR_CLIENT_UUID>",
@@ -142,12 +150,15 @@
       "tls": {
         "enabled": true,
         "server_name": "gateway.icloud.com",
-        "alpn": ["h3"]
+        "alpn": ["h3"],
+        "certificate": [
+          "<YOUR_CA_CERT_PEM>"
+        ]
       }
     },
     {
       "type": "shadowsocks",
-      "tag": "Fortress-Shadowsocks2022",
+      "tag": "Fortress-Shadowsocks2022 [Ultra-Low Battery AEAD]",
       "server": "<YOUR_SERVER_IP>",
       "server_port": 10443,
       "method": "2022-blake3-aes-256-gcm",
@@ -155,8 +166,19 @@
     },
     {
       "type": "wireguard",
-      "tag": "Fortress-WireGuard-Native",
+      "tag": "Fortress-WireGuard-Native [Direct Kernel Line-Rate]",
       "server": "<YOUR_SERVER_IP>",
+      "server_port": 51820,
+      "local_address": [
+        "10.66.66.2/32"
+      ],
+      "private_key": "<YOUR_WG_CLIENT_PRIVATE_KEY>",
+      "peer_public_key": "<YOUR_WG_SERVER_PUBLIC_KEY>"
+    },
+    {
+      "type": "wireguard",
+      "tag": "Fortress-WireGuard-TCP [Captive Portal & Strict TCP]",
+      "server": "127.0.0.1",
       "server_port": 51820,
       "local_address": [
         "10.66.66.2/32"

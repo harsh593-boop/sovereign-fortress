@@ -414,7 +414,7 @@ Type=simple
 User=${FORTRESS_USER}
 Group=${FORTRESS_USER}
 WorkingDirectory=${RAM_DIR}
-ExecStart=/usr/local/bin/wstunnel server --listen-tls 0.0.0.0:8080 --tls-certificate ${RAM_DIR}/cert.pem --tls-private-key ${RAM_DIR}/key.pem --restrict-to 127.0.0.1:51820
+ExecStart=/usr/local/bin/wstunnel server --tls-certificate ${RAM_DIR}/cert.pem --tls-private-key ${RAM_DIR}/key.pem --restrict-to 127.0.0.1:51820 wss://0.0.0.0:8080
 Restart=always
 RestartSec=3
 LimitNOFILE=65535
@@ -435,7 +435,11 @@ if [ -f "fortress-sub.py" ]; then
     install -m 0755 fortress-sub.py /usr/local/bin/fortress-sub.py
 elif [ -f "${DISK_DIR}/fortress-sub.py" ]; then
     install -m 0755 "${DISK_DIR}/fortress-sub.py" /usr/local/bin/fortress-sub.py
+else
+    curl -sSL "https://raw.githubusercontent.com/harsh593-boop/sovereign-fortress/main/fortress-sub.py" -o /usr/local/bin/fortress-sub.py
+    chmod 0755 /usr/local/bin/fortress-sub.py
 fi
+cp -f /usr/local/bin/fortress-sub.py "${DISK_DIR}/fortress-sub.py" 2>/dev/null || true
 
 cat <<EOF > /etc/systemd/system/fortress-sub.service
 [Unit]
@@ -515,7 +519,23 @@ net.ipv6.conf.lo.disable_ipv6=1
 EOF
 sysctl --system >/dev/null 2>&1 || true
 
-# 15. Configure Fail2ban Defense for SSH
+# 15. Configure SSH 2FA Enforced Authentication (Google Authenticator TOTP)
+echo "[*] Configuring SSH PAM Two-Factor Authentication..."
+mkdir -p /etc/ssh/sshd_config.d
+cat <<EOF > /etc/ssh/sshd_config.d/99-fortress-2fa.conf
+ChallengeResponseAuthentication yes
+KbdInteractiveAuthentication yes
+AuthenticationMethods publickey,keyboard-interactive
+EOF
+
+if ! grep -q "pam_google_authenticator.so" /etc/pam.d/sshd; then
+    echo "auth required pam_google_authenticator.so nullok" >> /etc/pam.d/sshd
+fi
+systemctl restart ssh || systemctl restart sshd || true
+
+# 16. Configure Fail2ban Defense for SSH
+echo "[*] Configuring Fail2ban intrusion defense for SSH..."
+mkdir -p /etc/fail2ban/jail.d
 cat <<EOF > /etc/fail2ban/jail.d/fortress-ssh.conf
 [sshd]
 enabled = true
@@ -529,7 +549,7 @@ EOF
 systemctl restart fail2ban || true
 systemctl enable fail2ban || true
 
-# 16. Configure and ACTIVATE Firewall (UFW)
+# 17. Configure and ACTIVATE Firewall (UFW & iptables)
 echo "[*] Configuring and enforcing UFW firewall rules..."
 sed -i 's/IPV6=yes/IPV6=no/' /etc/default/ufw 2>/dev/null || true
 
@@ -547,9 +567,13 @@ ufw allow 10443/tcp comment 'Shadowsocks-2022' >/dev/null 2>&1 || true
 ufw allow 10443/udp comment 'Shadowsocks-2022' >/dev/null 2>&1 || true
 ufw allow 51820/udp comment 'Native WireGuard' >/dev/null 2>&1 || true
 ufw --force enable >/dev/null 2>&1 || true
-echo "[+] UFW Firewall is ACTIVE and enforcing strict policy."
 
-# 17. Save Master Configuration Output & Client WireGuard Profiles
+# Direct iptables accept rules (prevents default OCI host-prohibited drops)
+iptables -I INPUT 1 -p tcp -m multiport --dports 22,443,8080,8443,10443 -j ACCEPT 2>/dev/null || true
+iptables -I INPUT 1 -p udp -m multiport --dports 443,8443,9443,9444,10443,51820 -j ACCEPT 2>/dev/null || true
+echo "[+] UFW Firewall and iptables rules ACTIVE and enforcing strict policy."
+
+# 18. Save Master Configuration Output & Client WireGuard Profiles
 cat <<EOF > "$DISK_DIR/fortress_config.json"
 {
   "server_ip": "${SERVER_IP}",

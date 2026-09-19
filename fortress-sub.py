@@ -227,11 +227,11 @@ def verify_session_cookie(cookie_str: str) -> bool:
         return False
 
 def get_protocol_links():
-    vless = f"vless://{UUID}@{SERVER_IP}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni={REALITY_SNI}&fp=chrome&pbk={REALITY_PUBKEY}&sid={REALITY_SHORTID}&type=tcp&headerType=none#Fortress-Reality-TCP"
     pin_param = f"&pinSHA256={PIN_SHA256}" if PIN_SHA256 else ""
+    vless = f"vless://{UUID}@{SERVER_IP}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni={REALITY_SNI}&fp=chrome&pbk={REALITY_PUBKEY}&sid={REALITY_SHORTID}&type=tcp&headerType=none#Fortress-Reality-TCP"
     hy2_sal = f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:9444?sni={REALITY_SNI}&alpn=h3&obfs=salamander&obfs-password={SALAMANDER_PASSWORD}{pin_param}#Fortress-Hysteria2-Salamander"
     hy2_std = f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:8443?sni={REALITY_SNI}&alpn=h3{pin_param}#Fortress-Hysteria2-Standard"
-    tuic = f"tuic://{UUID}:{HY2_PASSWORD}@{SERVER_IP}:9443?congestion_control=bbr&alpn=h3&sni={REALITY_SNI}#Fortress-TUIC5-UDP"
+    tuic = f"tuic://{UUID}:{HY2_PASSWORD}@{SERVER_IP}:9443?congestion_control=bbr&alpn=h3&sni={REALITY_SNI}{pin_param}#Fortress-TUIC5-UDP"
     ss = f"ss://MjAyMi1ibGFrZTMtYWVzLTI1Ni1nY206{SS_PASSWORD}@{SERVER_IP}:10443#Fortress-Shadowsocks2022"
     wg_native = f"wg://{SERVER_IP}:51820#Fortress-WireGuard-Native"
     wg_tcp = f"wstunnel://{SERVER_IP}:8080#Fortress-WireGuard-TCP"
@@ -243,18 +243,42 @@ def get_singbox_json_config():
     - address array in tun inbound
     - strict_route: false + route_exclude_address to prevent YogaDNS / Chrome WFP deadlock
     - All 7 protocols included + auto-fastest URLTest balancer
-    - Cryptographically verified TLS without insecure=true
+    - Cryptographically verified TLS with embedded private CA (no insecure: true)
     - Complete campus split-routing for *.campus.internal and 10.0.0.0/8
     """
+    ca_pem = None
+    for cadir in [RAM_DIR, DISK_DIR]:
+        capath = os.path.join(cadir, "ca.crt")
+        if os.path.exists(capath):
+            try:
+                with open(capath, "r", encoding="utf-8") as caf:
+                    ca_pem = caf.read().strip()
+                    if ca_pem:
+                        break
+            except Exception:
+                pass
+
     outbounds_list = [
-        "Fortress-Reality-TCP",
-        "Fortress-Hysteria2-Salamander",
-        "Fortress-Hysteria2-Standard",
-        "Fortress-TUIC5-UDP",
-        "Fortress-Shadowsocks2022"
+        "Fortress-Reality-TCP [DPI & Campus Firewall Slayer]",
+        "Fortress-Hysteria2-Salamander [Scrambled QUIC Anti-Throttling]",
+        "Fortress-Hysteria2-Standard [Brutal BBR Maximum 4K]",
+        "Fortress-TUIC5 [0-RTT Fast Mobile Roaming]",
+        "Fortress-Shadowsocks2022 [Ultra-Low Battery AEAD]"
     ]
     if WG_SERVER_PUB and not WG_SERVER_PUB.startswith("<"):
-        outbounds_list.append("Fortress-WireGuard-Native")
+        outbounds_list.append("Fortress-WireGuard-Native [Direct Kernel Line-Rate]")
+        outbounds_list.append("Fortress-WireGuard-TCP [Captive Portal & Strict TCP]")
+
+    nextdns_id = CONFIG.get("nextdns_id", "").strip()
+    remote_dns_addr = f"https://dns.nextdns.io/{nextdns_id}" if (nextdns_id and not nextdns_id.startswith("<")) else "https://1.1.1.1/dns-query"
+
+    hy2_sal_tls = {"enabled": True, "server_name": REALITY_SNI, "alpn": ["h3"]}
+    hy2_std_tls = {"enabled": True, "server_name": REALITY_SNI, "alpn": ["h3"]}
+    tuic_tls = {"enabled": True, "server_name": REALITY_SNI, "alpn": ["h3"]}
+    if ca_pem:
+        hy2_sal_tls["certificate"] = [ca_pem]
+        hy2_std_tls["certificate"] = [ca_pem]
+        tuic_tls["certificate"] = [ca_pem]
 
     cfg = {
         "log": {
@@ -269,7 +293,7 @@ def get_singbox_json_config():
                 },
                 {
                     "tag": "dns-remote",
-                    "address": "https://dns.nextdns.io/<YOUR_NEXTDNS_ID>",
+                    "address": remote_dns_addr,
                     "address_resolver": "dns-direct",
                     "detour": "proxy"
                 }
@@ -333,7 +357,7 @@ def get_singbox_json_config():
             },
             {
                 "type": "vless",
-                "tag": "Fortress-Reality-TCP",
+                "tag": "Fortress-Reality-TCP [DPI & Campus Firewall Slayer]",
                 "server": SERVER_IP,
                 "server_port": 443,
                 "uuid": UUID,
@@ -354,7 +378,7 @@ def get_singbox_json_config():
             },
             {
                 "type": "hysteria2",
-                "tag": "Fortress-Hysteria2-Salamander",
+                "tag": "Fortress-Hysteria2-Salamander [Scrambled QUIC Anti-Throttling]",
                 "server": SERVER_IP,
                 "server_port": 9444,
                 "password": HY2_PASSWORD,
@@ -362,41 +386,29 @@ def get_singbox_json_config():
                     "type": "salamander",
                     "password": SALAMANDER_PASSWORD
                 },
-                "tls": {
-                    "enabled": True,
-                    "server_name": REALITY_SNI,
-                    "alpn": ["h3"]
-                }
+                "tls": hy2_sal_tls
             },
             {
                 "type": "hysteria2",
-                "tag": "Fortress-Hysteria2-Standard",
+                "tag": "Fortress-Hysteria2-Standard [Brutal BBR Maximum 4K]",
                 "server": SERVER_IP,
                 "server_port": 8443,
                 "password": HY2_PASSWORD,
-                "tls": {
-                    "enabled": True,
-                    "server_name": REALITY_SNI,
-                    "alpn": ["h3"]
-                }
+                "tls": hy2_std_tls
             },
             {
                 "type": "tuic",
-                "tag": "Fortress-TUIC5-UDP",
+                "tag": "Fortress-TUIC5 [0-RTT Fast Mobile Roaming]",
                 "server": SERVER_IP,
                 "server_port": 9443,
                 "uuid": UUID,
                 "password": HY2_PASSWORD,
                 "congestion_control": "bbr",
-                "tls": {
-                    "enabled": True,
-                    "server_name": REALITY_SNI,
-                    "alpn": ["h3"]
-                }
+                "tls": tuic_tls
             },
             {
                 "type": "shadowsocks",
-                "tag": "Fortress-Shadowsocks2022",
+                "tag": "Fortress-Shadowsocks2022 [Ultra-Low Battery AEAD]",
                 "server": SERVER_IP,
                 "server_port": 10443,
                 "method": "2022-blake3-aes-256-gcm",
@@ -408,8 +420,17 @@ def get_singbox_json_config():
     if WG_SERVER_PUB and not WG_SERVER_PUB.startswith("<"):
         cfg["outbounds"].append({
             "type": "wireguard",
-            "tag": "Fortress-WireGuard-Native",
+            "tag": "Fortress-WireGuard-Native [Direct Kernel Line-Rate]",
             "server": SERVER_IP,
+            "server_port": 51820,
+            "local_address": [f"{WG_CLIENT_IP}/32"],
+            "private_key": WG_CLIENT_PRIV,
+            "peer_public_key": WG_SERVER_PUB
+        })
+        cfg["outbounds"].append({
+            "type": "wireguard",
+            "tag": "Fortress-WireGuard-TCP [Captive Portal & Strict TCP]",
+            "server": "127.0.0.1",
             "server_port": 51820,
             "local_address": [f"{WG_CLIENT_IP}/32"],
             "private_key": WG_CLIENT_PRIV,
