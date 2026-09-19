@@ -44,3 +44,13 @@ If any unauthorized commercial fork, re-uploaded mirror, infringing copy, or com
 
 For commercial licensing agreements, custom enterprise deployments, or authorized redistribution requests, contact the copyright holder directly via GitHub:
 * **Official Contact:** Open an issue or discussion on [https://github.com/harsh593-boop/sovereign-fortress](https://github.com/harsh593-boop/sovereign-fortress) or message via [https://github.com/harsh593-boop](https://github.com/harsh593-boop).
+
+---
+
+## 5. Autonomous AI Generation Disclosure & Absolute Liability Disclaimer
+
+This software, its documentation, and associated network configurations were designed, coded, and verified using Autonomous Agentic Artificial Intelligence (Antigravity AI Agent) under the direction, compilation, and supervision of **harsh593-boop**. 
+
+* **Human Authorship Reservation:** All compilation copyright, selection, and DMCA enforcement rights remain strictly vested in **harsh593-boop**.
+* **Zero Liability & No Warranty:** The project is provided strictly for academic and security research. The author assumes **no liability** whatsoever for civil, criminal, regulatory, or financial consequences, software bugs, or outages arising from the use or deployment of this repository. Users assume all risks.
+
