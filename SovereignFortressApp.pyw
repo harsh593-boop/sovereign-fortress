@@ -44,9 +44,11 @@ if os.path.exists(CONFIG_FILE):
 SERVER_IP = CONFIG.get("server_ip", "<YOUR_SERVER_IP>")
 SUB_PORT = CONFIG.get("sub_port", 8443)
 TOKEN = CONFIG.get("token", "<YOUR_SUBSCRIPTION_TOKEN>")
-SUB_URL = f"https://{SERVER_IP}:{SUB_PORT}/sub/{TOKEN}"
+SUB_URL = f"http://{SERVER_IP}:{SUB_PORT}/sub/{TOKEN}"
+SUB_URL_TRAFFIC_ONLY = f"http://{SERVER_IP}:{SUB_PORT}/sub/{TOKEN}?mode=traffic-only"
 HIDDIFY_DEEPLINK = f"hiddify://import/{SUB_URL}#SovereignFortress"
-PORTAL_URL = f"https://{SERVER_IP}:{SUB_PORT}/portal"
+PORTAL_URL = f"http://{SERVER_IP}:{SUB_PORT}/portal"
+PORTAL_HTTPS_URL = f"https://{SERVER_IP}:8444/portal"
 
 UUID = CONFIG.get("uuid", "<YOUR_UUID>")
 REALITY_PUBKEY = CONFIG.get("reality_pubkey", "<YOUR_REALITY_PUBLIC_KEY>")

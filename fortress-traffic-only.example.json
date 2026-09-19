@@ -8,26 +8,6 @@
         "tag": "dns-direct",
         "address": "local",
         "detour": "direct"
-      },
-      {
-        "tag": "dns-remote",
-        "address": "https://dns.nextdns.io/<YOUR_NEXTDNS_ID>",
-        "address_resolver": "dns-direct",
-        "detour": "proxy"
-      }
-    ],
-    "rules": [
-      {
-        "domain_suffix": [
-          ".campus.internal",
-          ".local",
-          ".internal"
-        ],
-        "server": "dns-direct"
-      },
-      {
-        "outbound": "any",
-        "server": "dns-remote"
       }
     ],
     "strategy": "prefer_ipv4"
@@ -195,7 +175,15 @@
     "auto_detect_interface": true,
     "rules": [
       {
-        "action": "hijack-dns"
+        "protocol": "dns",
+        "outbound": "direct"
+      },
+      {
+        "port": [
+          53,
+          853
+        ],
+        "outbound": "direct"
       },
       {
         "domain_suffix": [

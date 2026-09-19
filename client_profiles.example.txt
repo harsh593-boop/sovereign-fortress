@@ -12,22 +12,27 @@ Defense: Google Authenticator 2FA PAM, Active Reality Mirroring, DPAPI Vault
 ZERO CLIENT-SIDE SCRIPTS REQUIRED. Just install Hiddify App and paste or scan!
 App Download: https://github.com/hiddify/hiddify-app/releases (or Google Play Store)
 
-1. Standard HTTPS Subscription Link (Copy & Paste into Hiddify -> "+ New Profile"):
-   https://<YOUR_SERVER_IP>:8443/sub/<YOUR_SUBSCRIPTION_TOKEN>
+1. Standard Full-Traffic Subscription Link (Hiddify -> "+ New Profile"):
+   http://<YOUR_SERVER_IP>:8443/sub/<YOUR_SUBSCRIPTION_TOKEN>
 
 2. 1-Click Universal Auto-Import Link (Click in any browser to open & import):
-   hiddify://import/https://<YOUR_SERVER_IP>:8443/sub/<YOUR_SUBSCRIPTION_TOKEN>#SovereignFortress
+   hiddify://import/http://<YOUR_SERVER_IP>:8443/sub/<YOUR_SUBSCRIPTION_TOKEN>#SovereignFortress
 
-3. Real-Time Dynamic 2FA Subscription (Ultra-Paranoid Mode):
+3. Traffic-Only Mode Link (For YogaDNS / NextDNS / Chrome Secure DNS Coexistence):
+   http://<YOUR_SERVER_IP>:8443/sub/<YOUR_SUBSCRIPTION_TOKEN>?mode=traffic-only
+   1-Click Import:
+   hiddify://import/http://<YOUR_SERVER_IP>:8443/sub/<YOUR_SUBSCRIPTION_TOKEN>?mode=traffic-only#SovereignFortress-TrafficOnly
+
+4. Real-Time Dynamic 2FA Subscription (Ultra-Paranoid Mode):
    Even without saving a permanent token, you can fetch your profile on-demand
    using your phone's live 6-digit Google Authenticator code directly in the URL:
-   https://<YOUR_SERVER_IP>:8443/sub/<YOUR_CURRENT_6_DIGIT_CODE>
-   Example: https://<YOUR_SERVER_IP>:8443/sub/404620
+   http://<YOUR_SERVER_IP>:8443/sub/<YOUR_CURRENT_6_DIGIT_CODE>
+   Example: http://<YOUR_SERVER_IP>:8443/sub/404620
 
-4. Universal Base64 Subscription Link (For Clash / v2rayNG / Shadowrocket):
-   https://<YOUR_SERVER_IP>:8443/sub/<YOUR_SUBSCRIPTION_TOKEN>/b64
+5. Universal Base64 Subscription Link (For Clash / v2rayNG / Shadowrocket):
+   http://<YOUR_SERVER_IP>:8443/sub/<YOUR_SUBSCRIPTION_TOKEN>/b64
 
-5. Universal Subscription QR Code (Scan with Hiddify App Camera on Phone):
+6. Universal Subscription QR Code (Scan with Hiddify App Camera on Phone):
    qr_codes/qr_hiddify_universal.png
 
 * Automatic Campus Split-Routing Included in Profile:
@@ -39,7 +44,8 @@ App Download: https://github.com/hiddify/hiddify-app/releases (or Google Play St
 [2] SECURE WEB MANAGEMENT PORTAL (REMOTE SERVER VAULT)
 ================================================================================
 Access the live Sovereign Fortress dashboard directly from your browser:
-URL: https://<YOUR_SERVER_IP>:8443/portal
+- Standard HTTP Web Portal:  http://<YOUR_SERVER_IP>:8443/portal
+- Encrypted HTTPS Portal:    https://<YOUR_SERVER_IP>:8444/portal
 
 Login Authentication (Dual Option):
   Option A: Master Token: <YOUR_SUBSCRIPTION_TOKEN>

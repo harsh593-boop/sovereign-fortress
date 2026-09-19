@@ -18,6 +18,8 @@ import secrets
 import hashlib
 import urllib.parse
 import ssl
+import socket
+import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
 
@@ -237,7 +239,7 @@ def get_protocol_links():
     wg_tcp = f"wstunnel://{SERVER_IP}:8080#Fortress-WireGuard-TCP"
     return [vless, hy2_sal, hy2_std, tuic, ss, wg_native, wg_tcp]
 
-def get_singbox_json_config():
+def get_singbox_json_config(mode="full"):
     """
     Returns 100% compliant Sing-box 1.11+ configuration with:
     - address array in tun inbound
@@ -245,7 +247,10 @@ def get_singbox_json_config():
     - All 7 protocols included + auto-fastest URLTest balancer
     - Cryptographically verified TLS with embedded private CA (no insecure: true)
     - Complete campus split-routing for *.campus.internal and 10.0.0.0/8
+    - mode="full": Tunnel-Encrypted DNS + Full IP Proxy
+    - mode="traffic-only": Direct DNS (YogaDNS / NextDNS / Chrome Secure DNS coexistence) + Web Proxy
     """
+    is_traffic_only = (mode.lower() in ["traffic-only", "split", "direct-dns", "yogadns"])
     ca_pem = None
     for cadir in [RAM_DIR, DISK_DIR]:
         capath = os.path.join(cadir, "ca.crt")
@@ -280,11 +285,19 @@ def get_singbox_json_config():
         hy2_std_tls["certificate"] = [ca_pem]
         tuic_tls["certificate"] = [ca_pem]
 
-    cfg = {
-        "log": {
-            "level": "warn"
-        },
-        "dns": {
+    if is_traffic_only:
+        dns_config = {
+            "servers": [
+                {
+                    "tag": "dns-direct",
+                    "address": "local",
+                    "detour": "direct"
+                }
+            ],
+            "strategy": "prefer_ipv4"
+        }
+    else:
+        dns_config = {
             "servers": [
                 {
                     "tag": "dns-direct",
@@ -319,7 +332,13 @@ def get_singbox_json_config():
                 }
             ],
             "strategy": "prefer_ipv4"
+        }
+
+    cfg = {
+        "log": {
+            "level": "warn"
         },
+        "dns": dns_config,
         "inbounds": [
             {
                 "type": "tun",
@@ -442,42 +461,48 @@ def get_singbox_json_config():
         "tag": "direct"
     })
 
+    rules = []
+    if is_traffic_only:
+        rules.append({"protocol": "dns", "outbound": "direct"})
+        rules.append({"port": [53, 853], "outbound": "direct"})
+    else:
+        rules.append({"action": "hijack-dns"})
+
+    rules.extend([
+        {
+            "ip_is_private": True,
+            "outbound": "direct"
+        },
+        {
+            "domain": [
+                "campus.internal"
+            ],
+            "domain_suffix": [
+                "campus.internal",
+                ".campus.internal",
+                "local",
+                ".local",
+                "internal",
+                ".internal"
+            ],
+            "outbound": "direct"
+        },
+        {
+            "ip_cidr": [
+                "10.0.0.0/8",
+                "172.16.0.0/12",
+                "192.168.0.0/16"
+            ],
+            "outbound": "direct"
+        },
+        {
+            "outbound": "proxy"
+        }
+    ])
+
     cfg["route"] = {
         "auto_detect_interface": True,
-        "rules": [
-            {
-                "action": "hijack-dns"
-            },
-            {
-                "ip_is_private": True,
-                "outbound": "direct"
-            },
-            {
-                "domain": [
-                    "campus.internal"
-                ],
-                "domain_suffix": [
-                    "campus.internal",
-                    ".campus.internal",
-                    "local",
-                    ".local",
-                    "internal",
-                    ".internal"
-                ],
-                "outbound": "direct"
-            },
-            {
-                "ip_cidr": [
-                    "10.0.0.0/8",
-                    "172.16.0.0/12",
-                    "192.168.0.0/16"
-                ],
-                "outbound": "direct"
-            },
-            {
-                "outbound": "proxy"
-            }
-        ]
+        "rules": rules
     }
     return cfg
 
@@ -519,9 +544,8 @@ def render_login_page(error_msg=None):
     return LOGIN_HTML_TEMPLATE.replace("{{ERR_HTML}}", err_html)
 
 def render_dashboard_page(token, totp_secret):
-    proto = "https" if (os.path.exists(os.path.join(RAM_DIR, "cert.pem")) or os.path.exists(os.path.join(DISK_DIR, "cert.pem"))) else "http"
-    sub_url = f"{proto}://{SERVER_IP}:{PORT}/sub/{token}"
-    sub_b64_url = f"{proto}://{SERVER_IP}:{PORT}/sub/{token}/b64"
+    sub_url = f"http://{SERVER_IP}:{PORT}/sub/{token}"
+    sub_b64_url = f"http://{SERVER_IP}:{PORT}/sub/{token}/b64"
     hiddify_primary = f"hiddify://import/{sub_url}#SovereignFortress"
     vless, hy2_sal, hy2_std, tuic, ss, wg_native, wg_tcp = get_protocol_links()
 
@@ -648,6 +672,10 @@ class FortressSubHandler(BaseHTTPRequestHandler):
 
             q_format = query.get("format", [None])[0]
             fmt = sub_format or q_format
+            mode = query.get("mode", ["full"])[0]
+            if sub_format in ["traffic-only", "split", "direct-dns", "yogadns"]:
+                mode = "traffic-only"
+                fmt = None
 
             if fmt == "b64":
                 links_text = "\n".join(get_protocol_links()) + "\n"
@@ -677,13 +705,14 @@ class FortressSubHandler(BaseHTTPRequestHandler):
                 return
 
             # Default: Full Sing-box 1.11+ JSON
-            config_obj = get_singbox_json_config()
+            config_obj = get_singbox_json_config(mode=mode)
             body = json.dumps(config_obj, indent=2).encode("utf-8")
+            profile_title = "Sovereign Fortress (Traffic-Only)" if (mode.lower() in ["traffic-only", "split", "direct-dns", "yogadns"]) else "Sovereign Fortress"
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Content-Disposition", 'inline; filename="SovereignFortress.json"')
-            self.send_header("profile-title", "Sovereign Fortress")
+            self.send_header("profile-title", profile_title)
             self.send_header("profile-update-interval", "24")
             self.send_header("subscription-userinfo", "upload=0; download=0; total=10737418240000; expire=0")
             self.send_header("Connection", "close")
@@ -772,12 +801,30 @@ class FortressSubHandler(BaseHTTPRequestHandler):
 
         self.send_redirect_to_decoy()
 
+class AutoDetectServer(ThreadingMixIn, HTTPServer):
+    daemon_threads = True
+    def __init__(self, addr, handler, ssl_ctx=None):
+        super().__init__(addr, handler)
+        self.ssl_ctx = ssl_ctx
+
+    def get_request(self):
+        sock, addr = self.socket.accept()
+        if self.ssl_ctx:
+            try:
+                sock.settimeout(2.0)
+                first_byte = sock.recv(1, socket.MSG_PEEK)
+                sock.settimeout(None)
+                if first_byte == b'\x16':
+                    sock = self.ssl_ctx.wrap_socket(sock, server_side=True)
+            except Exception:
+                pass
+        return sock, addr
+
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
 
 def main():
     token = get_or_create_token()
-    server = ThreadedHTTPServer(("0.0.0.0", PORT), FortressSubHandler)
     
     cert_path = os.path.join(RAM_DIR, "cert.pem")
     key_path = os.path.join(RAM_DIR, "key.pem")
@@ -785,21 +832,39 @@ def main():
         cert_path = os.path.join(DISK_DIR, "cert.pem")
         key_path = os.path.join(DISK_DIR, "key.pem")
 
+    ssl_ctx = None
     if os.path.exists(cert_path) and os.path.exists(key_path):
         try:
-            ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-            ctx.load_cert_chain(certfile=cert_path, keyfile=key_path)
-            server.socket = ctx.wrap_socket(server.socket, server_side=True)
-            print(f"[+] Sovereign Fortress HTTPS Subscription Server online on port {PORT} (TLS Enabled)")
+            ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            ssl_ctx.load_cert_chain(certfile=cert_path, keyfile=key_path)
+            print("[+] TLS certificate chain loaded successfully.")
         except Exception as e:
-            print(f"[-] Warning: Failed to initialize TLS: {e}. Falling back to HTTP.")
-    else:
-        print(f"[*] Sovereign Fortress HTTP Subscription Server online on port {PORT}")
+            print(f"[-] Warning: Failed to initialize TLS: {e}")
+
+    # 1. Primary Dual-Protocol Server on PORT (8443)
+    # Serves plain HTTP for Hiddify / mobile apps and auto-detects HTTPS for browsers
+    server_primary = AutoDetectServer(("0.0.0.0", PORT), FortressSubHandler, ssl_ctx)
+    print(f"[+] Sovereign Fortress Dual-Protocol Subscription Server online on port {PORT} (Auto HTTP/HTTPS)")
+
+    # 2. Dedicated HTTPS Server on port 8444 for secure web portal
+    if ssl_ctx:
+        def start_dedicated_https():
+            try:
+                https_port = 8444
+                server_https = ThreadedHTTPServer(("0.0.0.0", https_port), FortressSubHandler)
+                server_https.socket = ssl_ctx.wrap_socket(server_https.socket, server_side=True)
+                print(f"[+] Sovereign Fortress Dedicated HTTPS Portal online on port {https_port}")
+                server_https.serve_forever()
+            except Exception as ex:
+                print(f"[-] Dedicated HTTPS server error: {ex}")
+
+        t_https = threading.Thread(target=start_dedicated_https, daemon=True)
+        t_https.start()
 
     try:
-        server.serve_forever()
+        server_primary.serve_forever()
     except KeyboardInterrupt:
-        server.server_close()
+        server_primary.server_close()
 
 if __name__ == "__main__":
     main()

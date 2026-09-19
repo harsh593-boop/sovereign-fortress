@@ -559,7 +559,8 @@ ufw default allow outgoing >/dev/null 2>&1 || true
 ufw allow 22/tcp comment 'SSH 2FA' >/dev/null 2>&1 || true
 ufw allow 443/tcp comment 'VLESS Reality' >/dev/null 2>&1 || true
 ufw allow 8080/tcp comment 'WireGuard over TCP (wstunnel)' >/dev/null 2>&1 || true
-ufw allow 8443/tcp comment 'HTTPS Subscription & Portal' >/dev/null 2>&1 || true
+ufw allow 8443/tcp comment 'Dual-Mode Subscription & Web Portal' >/dev/null 2>&1 || true
+ufw allow 8444/tcp comment 'Dedicated HTTPS Web Portal' >/dev/null 2>&1 || true
 ufw allow 8443/udp comment 'Hysteria 2 Standard' >/dev/null 2>&1 || true
 ufw allow 9443/udp comment 'TUIC v5' >/dev/null 2>&1 || true
 ufw allow 9444/udp comment 'Hysteria 2 Salamander' >/dev/null 2>&1 || true
@@ -569,7 +570,7 @@ ufw allow 51820/udp comment 'Native WireGuard' >/dev/null 2>&1 || true
 ufw --force enable >/dev/null 2>&1 || true
 
 # Direct iptables accept rules (prevents default OCI host-prohibited drops)
-iptables -I INPUT 1 -p tcp -m multiport --dports 22,443,8080,8443,10443 -j ACCEPT 2>/dev/null || true
+iptables -I INPUT 1 -p tcp -m multiport --dports 22,443,8080,8443,8444,10443 -j ACCEPT 2>/dev/null || true
 iptables -I INPUT 1 -p udp -m multiport --dports 443,8443,9443,9444,10443,51820 -j ACCEPT 2>/dev/null || true
 echo "[+] UFW Firewall and iptables rules ACTIVE and enforcing strict policy."
 
@@ -645,8 +646,10 @@ echo "[+] TUIC v5:            UDP 9443 (0-RTT Native QUIC)"
 echo "[+] Shadowsocks:        TCP/UDP 10443 (2022-blake3-aes-256-gcm)"
 echo "[+] Native WireGuard:   UDP 51820 (Kernel Line-Rate)"
 echo "[+] WireGuard-over-TCP: TCP 8080 (wstunnel TLS 1.3)"
-echo "[+] HTTPS Subscription: https://${SERVER_IP}:8443/sub/${SUB_TOKEN}"
-echo "[+] HTTPS Web Portal:   https://${SERVER_IP}:8443/portal"
+echo "[+] Universal Sub (HTTP): http://${SERVER_IP}:8443/sub/${SUB_TOKEN}"
+echo "[+] Traffic-Only Sub:    http://${SERVER_IP}:8443/sub/${SUB_TOKEN}?mode=traffic-only"
+echo "[+] Web Portal (HTTP):   http://${SERVER_IP}:8443/portal"
+echo "[+] Web Portal (HTTPS):  https://${SERVER_IP}:8444/portal"
 echo "[+] Recursive DNS:      127.0.0.1:5335 (Unbound Zero-Log Root Hints)"
 echo "[+] Master Token:       ${SUB_TOKEN}"
 echo "[+] Sandboxing:         Dedicated unprivileged user 'fortress' + Systemd Strict"
