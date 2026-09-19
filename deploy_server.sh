@@ -50,7 +50,23 @@ echo "[*] Downloading Sing-box v${SINGBOX_VER} for ${SB_ARCH}..."
 SB_TAR="sing-box-${SINGBOX_VER}-linux-${SB_ARCH}.tar.gz"
 SB_URL="https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/${SB_TAR}"
 
+case "$SB_ARCH" in
+    amd64) EXPECTED_SHA256="0bb762ef286b36c2016d9107fc1f089be7a75f6d579b33f067d31e696c05927e" ;;
+    arm64) EXPECTED_SHA256="4e687359db42b6a28ef93f9cd2cb9549c4b0079cc7e49bc5f6ecbf98257a2507" ;;
+esac
+
 curl -sSL "$SB_URL" -o "/tmp/${SB_TAR}"
+ACTUAL_SHA256=$(sha256sum "/tmp/${SB_TAR}" | awk '{print $1}')
+
+if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+    echo "[-] Cryptographic verification failed for Sing-box archive!"
+    echo "    Expected: $EXPECTED_SHA256"
+    echo "    Actual:   $ACTUAL_SHA256"
+    rm -f "/tmp/${SB_TAR}"
+    exit 1
+fi
+echo "[+] Cryptographic SHA256 verified successfully: $ACTUAL_SHA256"
+
 tar -xzf "/tmp/${SB_TAR}" -C /tmp/
 install -m 0755 "/tmp/sing-box-${SINGBOX_VER}-linux-${SB_ARCH}/sing-box" /usr/local/bin/sing-box
 rm -rf "/tmp/sing-box*"

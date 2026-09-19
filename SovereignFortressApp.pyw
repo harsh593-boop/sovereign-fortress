@@ -199,7 +199,17 @@ class SovereignApp(tk.Tk):
                               command=self.probe_all_ports_async)
         btn_probe.pack(side="left", padx=4)
 
-        btn_vault = tk.Button(act_frame, text="🔒 Lock Vault", bg="#1f2937", fg="#a78bfa", activebackground="#374151",
+        btn_panic = tk.Button(act_frame, text="⚠️ Panic Shred", bg="#3b1111", fg="#fca5a5", activebackground="#7f1d1d",
+                              activeforeground="#ffffff", font=("Segoe UI", 9), relief="flat", padx=10, pady=6, cursor="hand2",
+                              command=self.panic_shred)
+        btn_panic.pack(side="right", padx=4)
+
+        btn_unlock = tk.Button(act_frame, text="🔓 Unlock", bg="#1f2937", fg="#34d399", activebackground="#374151",
+                               activeforeground="#34d399", font=("Segoe UI", 9), relief="flat", padx=10, pady=6, cursor="hand2",
+                               command=self.unlock_vault)
+        btn_unlock.pack(side="right", padx=4)
+
+        btn_vault = tk.Button(act_frame, text="🔒 Lock", bg="#1f2937", fg="#a78bfa", activebackground="#374151",
                               activeforeground="#a78bfa", font=("Segoe UI", 9), relief="flat", padx=10, pady=6, cursor="hand2",
                               command=self.lock_vault)
         btn_vault.pack(side="right", padx=4)
@@ -352,6 +362,22 @@ class SovereignApp(tk.Tk):
             messagebox.showinfo("Vault Locked", "Client keys and credentials have been DPAPI encrypted at rest!\nOriginal plaintext files are cryptoshredded.")
         else:
             messagebox.showerror("Error", "fortress_vault.py not found.")
+
+    def unlock_vault(self):
+        vault_py = os.path.join(APP_DIR, "fortress_vault.py")
+        if os.path.exists(vault_py):
+            res = subprocess.run([sys.executable, vault_py, "unlock"], capture_output=True, text=True)
+            messagebox.showinfo("Vault Unlocked", "Client keys and credentials decrypted and ready for use!")
+        else:
+            messagebox.showerror("Error", "fortress_vault.py not found.")
+
+    def panic_shred(self):
+        if messagebox.askyesno("Emergency Panic", "Are you SURE you want to permanently cryptoshred all local credentials, keys, and configurations?\n\nThis action is irreversible!"):
+            vault_py = os.path.join(APP_DIR, "fortress_vault.py")
+            if os.path.exists(vault_py):
+                p = subprocess.Popen([sys.executable, vault_py, "shred"], stdin=subprocess.PIPE, text=True)
+                p.communicate(input="VAPORIZE\n")
+                messagebox.showwarning("Vaporized", "All local credentials have been 3-pass cryptoshredded!")
 
 if __name__ == "__main__":
     app = SovereignApp()
