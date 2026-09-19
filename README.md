@@ -29,19 +29,21 @@ flowchart TD
         Hy2Std["Hysteria 2 Standard (UDP 8443)\nBrutal BBR Congestion Control (Lossy Wi-Fi)"]
         TUIC["TUIC v5 (UDP 9443)\nRFC 9000 QUIC + 0-RTT Mobile Roaming"]
         Shadowsocks["Shadowsocks-2022 (TCP/UDP 10443)\n2022-blake3-aes-256-gcm AEAD Cipher"]
-        WSTunnel["WireGuard over TCP / WSTunnel (TCP 8443)\nEncapsulated inside TLS 1.3 WebSockets"]
+        WSTunnel["WireGuard over TCP / WSTunnel (TCP 8080)\nEncapsulated inside TLS 1.3 WebSockets"]
+        NativeWG["Native WireGuard (UDP 51820)\nChaCha20-Poly1305 Line-Rate Kernel Tunnel"]
+        AutoFast["auto-fastest (Dynamic Balancer)\nAutomatically benchmarks latency to lowest-ping proxy"]
     end
 
     subgraph CoreEngine["3. Sovereign Fortress Core (Oracle Cloud Mumbai)"]
         RAMFS["Volatile RAM Runtime (tmpfs /run/fortress)\nZero Disk Logs • Ephemeral Keys"]
-        Singbox["Sing-box 1.11+ Core Router"]
+        Singbox["Sing-box 1.11+ Core Router\nUnprivileged 'fortress' User + Systemd Sandbox"]
         Unbound["Self-Hosted Unbound Recursive DNS\nRoot Hint Recursion • Zero Logs • DNSSEC"]
-        SubDaemon["Dynamic 2FA Subscription & Web Portal (TCP 8443)"]
+        SubDaemon["Dynamic 2FA HTTPS Subscription & Web Portal (TCP 8443)"]
         PAM2FA["SSH PAM Google Authenticator (Key + TOTP Enforced)"]
     end
 
     subgraph InternetExit["4. External Exit & Destination"]
-        Decoy["Active Defense Mirror: Apple CDN / Microsoft"]
+        Decoy["Active Defense Handshake: gateway.icloud.com (Apple CDN)"]
         PublicWeb["Uncensored Global Internet"]
         CampusLAN["IISER Berhampur Campus Intranet (*.campus.internal & 10.0.0.0/8)"]
     end
@@ -104,9 +106,9 @@ sequenceDiagram
         User->>Fortress: Stream Encrypted Traffic Inside TLS 1.3
         Fortress->>Target: Forward to Destination via Mumbai Exit
     else Active Prober / FortiGate Scanner Probe
-        Fortress->>Apple: Reverse-proxy connection to real Apple CDN
+        Fortress->>Apple: Detour handshake to real Apple CDN edge
         Apple-->>FortiGate: Real Apple TLS Certificate & Responses
-        Note over FortiGate: Scanner concludes IP is a benign Apple CDN node!
+        Note over FortiGate: Scanner receives authentic Apple CDN certificate!
     end
 ```
 
@@ -116,12 +118,13 @@ sequenceDiagram
 
 | Protocol Mode | Transport | Port | Congestion / Cipher | Anti-Censorship Superpower | Best Used For |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| **auto-fastest** | Auto | `Auto` | Dynamic Latency URLTest | Automatically benchmarks latency to all proxies and detours to lowest-ping route (labeled 'lowest' Balancer in Hiddify) | All-Round Best Experience |
 | **VLESS + XTLS-Reality** | TCP | `443` | `xtls-rprx-vision` | Borrows real Apple TLS certs; active probers redirected to Apple CDN | Strict DPI & Firewalls |
 | **Hysteria 2 Salamander** | UDP | `9444` | ChaCha20 XOR + BLAKE3 | Header scrambling makes QUIC unrecognizable to heuristics | UDP throttling / QUIC drop |
 | **Hysteria 2 Standard** | UDP | `8443` | Brutal BBR over QUIC | Up to 1 Gbps throughput on lossy campus Wi-Fi | 4K Streaming & Gaming |
 | **TUIC v5** | UDP | `9443` | RFC 9000 QUIC + BBR | 0-RTT handshake delay for instant reconnection | Mobile roaming (Wi-Fi ↔ 5G) |
 | **Shadowsocks-2022** | TCP/UDP | `10443` | `2022-blake3-aes-256-gcm` | AEAD with variable-length packet padding | Minimal battery consumption |
-| **WireGuard over TCP** | TCP | `8443` | TLS 1.3 WebSockets (`wstunnel`) | Wraps WireGuard inside HTTPS WebSockets | Captive portals blocking UDP |
+| **WireGuard over TCP** | TCP | `8080` | TLS 1.3 WebSockets (`wstunnel`) | Wraps WireGuard inside HTTPS WebSockets | Captive portals blocking UDP |
 | **Native WireGuard** | UDP | `51820` | ChaCha20-Poly1305 (Kernel) | Direct Linux kernel line-rate processing | High-speed unrestricted LAN |
 
 ---
@@ -132,7 +135,7 @@ sequenceDiagram
 1. An **Oracle Cloud Infrastructure (OCI)** account (Always Free Tier).
 2. An Ubuntu 22.04 / 24.04 VM instance (`VM.Standard.E2.1.Micro` or `VM.Standard.A1.Flex`).
 3. Ingress Security Rules opened:
-   - **TCP**: `22`, `443`, `8443`, `10443`
+   - **TCP**: `22`, `443`, `8080`, `8443`, `10443`
    - **UDP**: `443`, `8443`, `9443`, `9444`, `10443`, `51820`
 
 ### Automated Deployment
@@ -144,11 +147,14 @@ sudo bash deploy_server.sh
 ```
 
 The automated installer will:
-1. Mount a 256 MB volatile RAM disk (`tmpfs`) at `/run/fortress` for anti-forensic security.
-2. Install Sing-box 1.11+ Core and the Unbound recursive zero-log DNS resolver.
-3. Configure Google Authenticator PAM 2FA for SSH.
-4. Launch the dynamic subscription daemon and management portal on port `8443`.
-5. Output your live subscription URL and QR codes!
+1. Create dedicated unprivileged system user `fortress` with Linux routing capabilities (`CAP_NET_ADMIN`).
+2. Mount a 256 MB volatile RAM disk (`tmpfs`) at `/run/fortress` for zero disk logs.
+3. Install Sing-box 1.11.4 Core and WSTunnel with SHA-256 cryptographic verification.
+4. Configure Unbound recursive zero-log DNS resolver on `127.0.0.1:5335`.
+5. Configure Fail2ban intrusion defense and Google Authenticator PAM 2FA for SSH.
+6. Enforce strict UFW firewall policies and disable IPv6 to prevent network leaks.
+7. Launch the dynamic HTTPS subscription daemon and management portal on port `8443`.
+8. Output your live HTTPS subscription URL, WireGuard profiles, and QR codes!
 
 ---
 
@@ -158,16 +164,18 @@ The automated installer will:
 1. Install **Hiddify** from [GitHub Releases](https://github.com/hiddify/hiddify-app/releases) or Google Play Store.
 2. Click **+ Add Profile** &rarr; **Add from Clipboard** &rarr; paste your subscription URL:
    ```text
-   http://<YOUR_SERVER_IP>:8443/sub/<YOUR_SUBSCRIPTION_TOKEN>
+   https://<YOUR_SERVER_IP>:8443/sub/<YOUR_SUBSCRIPTION_TOKEN>
    ```
 3. Tap **Connect**!
 
+*Note on 'auto-fastest'*: In Hiddify, the dynamic `urltest` group automatically appears as the **'lowest' Balancer**. It measures real-time latency across all proxies and routes through the fastest connection.
+
 ### 2. Native Windows Desktop Application
 Launch `Launch Sovereign Fortress.bat` (or run `SovereignFortressApp.pyw`):
-* Dark-mode control center with real-time protocol latency and port status indicators.
+* Dark-mode control center with real-time protocol port reachability and status indicators.
 * 1-Click import into Hiddify.
 * Integrated Web Portal and QR Code launcher.
-* Local DPAPI credential protection (`Protect-FortressVault.ps1`) and emergency cryptoshredding panic switch (`Shred-Fortress.ps1`).
+* Local DPAPI credential protection (`Protect-FortressVault.ps1`) and emergency overwrite panic switch (`Shred-Fortress.ps1`).
 
 ### 3. YogaDNS Setup (for Campus Wi-Fi)
 See [`yogadns_rules.md`](yogadns_rules.md) for full step-by-step instructions:
@@ -176,14 +184,17 @@ See [`yogadns_rules.md`](yogadns_rules.md) for full step-by-step instructions:
 
 ---
 
-## 🔐 Zero-Trust & Anti-Forensic Protections
+## 🔐 Zero-Trust & Hardened Protections
 
 * **SSH 2FA (Google Authenticator via PAM):** Key-only access is rejected. Server requires both the SSH Key and a live 6-digit TOTP code.
+* **Fail2ban Intrusion Defense:** Enforces jail on SSH port 22 with automatic IP bans for repeated failed attempts.
+* **Least-Privilege Execution:** Sing-box and subscription daemons run as dedicated unprivileged system user `fortress` with strict systemd sandboxing.
 * **1-Click Token Revocation:** Instantly kills leaked subscription links in volatile RAM.
 * **Dynamic 2FA Subscription:** Append your live 6-digit TOTP code (`/sub/<TOTP>`) to fetch profiles on demand with a 30-second expiry.
-* **Active Defense Decoy:** Unauthorized requests automatically redirect (HTTP 302) to `https://www.apple.com/`.
-* **Zero Disk Logs:** All active tokens and certificates reside in `/run/fortress` on volatile `tmpfs`.
-* **Remote Panic Switch:** A single trigger executes multi-pass cryptoshredding (`shred -u -z -n 3`) on RAM and disk templates before poweroff.
+* **Active Defense Camouflage:** Unauthorized requests automatically detour to Apple CDN edge.
+* **Volatile RAM Runtime:** Active tokens, certificates, and runtime sessions operate in `/run/fortress` (`tmpfs`); master persistent templates in `/etc/fortress` are secured with `chmod 700` and `chmod 600`.
+* **Client DPAPI Protection:** Local keys encrypted at rest using Windows user-bound DPAPI (`CryptProtectData`).
+* **Emergency Panic Switch:** Multi-pass file overwriting and cryptographic key erasure on local working files.
 
 ---
 

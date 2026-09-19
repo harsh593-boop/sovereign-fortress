@@ -63,7 +63,7 @@ function Cryptographic-Shred($filePath) {
     }
 }
 
-Write-Host "`n[*] Commencing 3-Pass Cryptoshredding on all credentials..." -ForegroundColor DarkYellow
+Write-Host "`n[*] Commencing Multi-Pass Overwrite on all credentials..." -ForegroundColor DarkYellow
 foreach ($file in $WipeFiles) {
     Cryptographic-Shred $file
 }
@@ -82,4 +82,4 @@ if (Test-Path $qrDir) {
 # Flush DNS cache
 Clear-DnsClientCache
 
-Write-Host "`n[✓] FORENSIC VAPORIZATION COMPLETE. All credentials eradicated." -ForegroundColor Green
+Write-Host "`n[✓] CREDENTIAL ERASURE COMPLETE. All local files overwritten and removed." -ForegroundColor Green

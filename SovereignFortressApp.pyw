@@ -44,9 +44,9 @@ if os.path.exists(CONFIG_FILE):
 SERVER_IP = CONFIG.get("server_ip", "<YOUR_SERVER_IP>")
 SUB_PORT = CONFIG.get("sub_port", 8443)
 TOKEN = CONFIG.get("token", "<YOUR_SUBSCRIPTION_TOKEN>")
-SUB_URL = f"http://{SERVER_IP}:{SUB_PORT}/sub/{TOKEN}"
+SUB_URL = f"https://{SERVER_IP}:{SUB_PORT}/sub/{TOKEN}"
 HIDDIFY_DEEPLINK = f"hiddify://import/{SUB_URL}#SovereignFortress"
-PORTAL_URL = f"http://{SERVER_IP}:{SUB_PORT}/portal"
+PORTAL_URL = f"https://{SERVER_IP}:{SUB_PORT}/portal"
 
 UUID = CONFIG.get("uuid", "<YOUR_UUID>")
 REALITY_PUBKEY = CONFIG.get("reality_pubkey", "<YOUR_REALITY_PUBLIC_KEY>")
@@ -55,46 +55,57 @@ REALITY_SNI = CONFIG.get("reality_sni", "gateway.icloud.com")
 HY2_PASSWORD = CONFIG.get("hy2_password", "<YOUR_HYSTERIA2_PASSWORD>")
 SALAMANDER_PASS = CONFIG.get("salamander_password", "<YOUR_SALAMANDER_PASSWORD>")
 SS_PASSWORD = CONFIG.get("ss_password", "<YOUR_SHADOWSOCKS_PASSWORD>")
+PIN_SHA256 = CONFIG.get("pin_sha256", "")
+pin_param = f"&pinSHA256={PIN_SHA256}" if PIN_SHA256 else ""
 
 PROTOCOLS = [
     {
-        "name": "VLESS + XTLS-Reality",
+        "name": "auto-fastest (Latency Balancer)",
+        "port": "Auto",
+        "proto": "none",
+        "port_num": 0,
+        "badge": "Lowest-Ping Auto Detour",
+        "desc": "Benchmarks latency to all active proxies and automatically detours to lowest-ping route (labeled 'lowest' Balancer in Hiddify).",
+        "link": f"{SUB_URL}"
+    },
+    {
+        "name": "Fortress-Reality-TCP",
         "port": "TCP 443",
         "proto": "tcp",
         "port_num": 443,
         "badge": "GFW / FortiGate Slayer",
-        "desc": f"Camouflage: {REALITY_SNI}. Active defense reverse-proxies unauthorized probes to Apple CDN.",
-        "link": f"vless://{UUID}@{SERVER_IP}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni={REALITY_SNI}&fp=chrome&pbk={REALITY_PUBKEY}&sid={REALITY_SHORTID}&type=tcp&headerType=none#Fortress-Reality"
+        "desc": f"Camouflage: {REALITY_SNI}. Active probers without Reality auth keys are detoured to Apple CDN edge.",
+        "link": f"vless://{UUID}@{SERVER_IP}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni={REALITY_SNI}&fp=chrome&pbk={REALITY_PUBKEY}&sid={REALITY_SHORTID}&type=tcp&headerType=none#Fortress-Reality-TCP"
     },
     {
-        "name": "Hysteria 2 Salamander",
+        "name": "Fortress-Hysteria2-Salamander",
         "port": "UDP 9444",
         "proto": "udp",
         "port_num": 9444,
         "badge": "Extreme Stealth QUIC Scrambler",
         "desc": "ChaCha20 XOR full-packet header scrambling with BLAKE3 KDF. Bypasses deep packet inspection.",
-        "link": f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:9444?insecure=1&sni=www.microsoft.com&alpn=h3&obfs=salamander&obfs-password={SALAMANDER_PASS}#Fortress-Hysteria2-Salamander"
+        "link": f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:9444?sni={REALITY_SNI}&alpn=h3&obfs=salamander&obfs-password={SALAMANDER_PASS}{pin_param}#Fortress-Hysteria2-Salamander"
     },
     {
-        "name": "Hysteria 2 Standard",
+        "name": "Fortress-Hysteria2-Standard",
         "port": "UDP 8443",
         "proto": "udp",
         "port_num": 8443,
         "badge": "Brutal BBR / Maximum Bandwidth",
         "desc": "Aggressive congestion control designed for lossy campus Wi-Fi. Delivers gigabit throughput.",
-        "link": f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:8443?insecure=1&sni=www.microsoft.com&alpn=h3#Fortress-Hysteria2-Standard"
+        "link": f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:8443?sni={REALITY_SNI}&alpn=h3{pin_param}#Fortress-Hysteria2-Standard"
     },
     {
-        "name": "TUIC v5",
+        "name": "Fortress-TUIC5",
         "port": "UDP 9443",
         "proto": "udp",
         "port_num": 9443,
         "badge": "0-RTT Rapid Mobile Roaming",
         "desc": "RFC 9000 QUIC protocol with zero handshake delay when switching Wi-Fi access points.",
-        "link": f"tuic://{UUID}:{HY2_PASSWORD}@{SERVER_IP}:9443?congestion_control=bbr&alpn=h3&sni=www.microsoft.com&allow_insecure=1#Fortress-TUIC5"
+        "link": f"tuic://{UUID}:{HY2_PASSWORD}@{SERVER_IP}:9443?congestion_control=bbr&alpn=h3&sni={REALITY_SNI}#Fortress-TUIC5-UDP"
     },
     {
-        "name": "Shadowsocks-2022",
+        "name": "Fortress-Shadowsocks2022",
         "port": "TCP/UDP 10443",
         "proto": "tcp",
         "port_num": 10443,
@@ -103,13 +114,13 @@ PROTOCOLS = [
         "link": f"ss://MjAyMi1ibGFrZTMtYWVzLTI1Ni1nY206{SS_PASSWORD}@{SERVER_IP}:10443#Fortress-Shadowsocks2022"
     },
     {
-        "name": "WireGuard over TCP",
-        "port": "TCP 8443",
+        "name": "WireGuard over TCP (WSTunnel)",
+        "port": "TCP 8080",
         "proto": "tcp",
-        "port_num": 8443,
+        "port_num": 8080,
         "badge": "WSTunnel TLS 1.3",
         "desc": "Encapsulates WireGuard inside HTTPS WebSockets to bypass total UDP blocks.",
-        "link": f"wstunnel://{SERVER_IP}:8443"
+        "link": f"wstunnel://{SERVER_IP}:8080"
     },
     {
         "name": "Native WireGuard",
@@ -293,10 +304,14 @@ class SovereignApp(tk.Tk):
             if not lbl:
                 continue
 
+            if ptype == "none":
+                self.after(0, lambda l=lbl: l.config(text="BALANCER ACTIVE", foreground="#34d399"))
+                continue
+
             lat = self._measure_latency(SERVER_IP, port, ptype)
             if lat is not None:
                 color = "#34d399" if lat < 80 else ("#fbbf24" if lat < 150 else "#38bdf8")
-                text = f"Ping: {lat:.0f} ms (ONLINE)"
+                text = f"Probe: {lat:.0f} ms (ONLINE)"
             else:
                 color = "#38bdf8" if ptype == "udp" else "#ef4444"
                 text = "ACTIVE (UDP)" if ptype == "udp" else "TIMEOUT"
@@ -338,7 +353,7 @@ class SovereignApp(tk.Tk):
     def copy_sub_link(self):
         self.clipboard_clear()
         self.clipboard_append(SUB_URL)
-        messagebox.showinfo("Copied", f"Universal Subscription URL copied to clipboard!\n\n{SUB_URL}\n\nIn Hiddify, paste this into '+ New Profile'.")
+        messagebox.showinfo("Copied", f"Universal Subscription URL copied to clipboard!\n\n{SUB_URL}\n\nIn Hiddify, paste this into '+ New Profile'.\nNotice: Do not share bearer subscription URLs with untrusted parties.")
 
     def copy_text(self, text):
         self.clipboard_clear()
@@ -359,7 +374,7 @@ class SovereignApp(tk.Tk):
         vault_py = os.path.join(APP_DIR, "fortress_vault.py")
         if os.path.exists(vault_py):
             res = subprocess.run([sys.executable, vault_py, "lock"], capture_output=True, text=True)
-            messagebox.showinfo("Vault Locked", "Client keys and credentials have been DPAPI encrypted at rest!\nOriginal plaintext files are cryptoshredded.")
+            messagebox.showinfo("Vault Locked", "Client keys and credentials encrypted at rest using Windows User-Bound DPAPI (CryptProtectData)!\nOriginal plaintext files securely wiped.")
         else:
             messagebox.showerror("Error", "fortress_vault.py not found.")
 
@@ -367,17 +382,17 @@ class SovereignApp(tk.Tk):
         vault_py = os.path.join(APP_DIR, "fortress_vault.py")
         if os.path.exists(vault_py):
             res = subprocess.run([sys.executable, vault_py, "unlock"], capture_output=True, text=True)
-            messagebox.showinfo("Vault Unlocked", "Client keys and credentials decrypted and ready for use!")
+            messagebox.showinfo("Vault Unlocked", "Client keys and credentials decrypted for active VPN session.\nTip: Lock vault when not in active use.")
         else:
             messagebox.showerror("Error", "fortress_vault.py not found.")
 
     def panic_shred(self):
-        if messagebox.askyesno("Emergency Panic", "Are you SURE you want to permanently cryptoshred all local credentials, keys, and configurations?\n\nThis action is irreversible!"):
+        if messagebox.askyesno("Emergency Panic", "Are you SURE you want to perform multi-pass overwrite and cryptographic key erasure on all local credentials, keys, and configurations?\n\nThis action is irreversible!"):
             vault_py = os.path.join(APP_DIR, "fortress_vault.py")
             if os.path.exists(vault_py):
                 p = subprocess.Popen([sys.executable, vault_py, "shred"], stdin=subprocess.PIPE, text=True)
                 p.communicate(input="VAPORIZE\n")
-                messagebox.showwarning("Vaporized", "All local credentials have been 3-pass cryptoshredded!")
+                messagebox.showwarning("Keys Erased", "All local credentials have undergone multi-pass overwrite and key erasure.")
 
 if __name__ == "__main__":
     app = SovereignApp()

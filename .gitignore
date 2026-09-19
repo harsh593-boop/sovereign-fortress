@@ -6,6 +6,7 @@
 *.pem
 *.crt
 *.conf
+!*.example.conf
 *.enc
 *.log
 *.url
@@ -43,6 +44,7 @@ create_desktop_shortcuts.py
 deep_adversarial_verification.py
 deploy.ps1
 deploy.py
+deploy_and_verify_all.py
 deploy_extreme_stealth.py
 deploy_fortress_sub_to_server.py
 deploy_reality_fix.py
@@ -53,7 +55,6 @@ finalize_server_dns.py
 fix.sh
 fix_and_setup_wg.py
 fix_reality_and_dns.py
-fortress-sub.py
 generate_qr_and_dashboard.py
 generate_qrs.py
 get_ssh_totp.py
@@ -67,7 +68,6 @@ run_audit.py
 run_remote.py
 setup_selfhosted_dns.py
 setup_server_defense.py
-start-wstunnel.bat
 test_clock_diff.py
 test_totp_login.py
 test_tuic.py

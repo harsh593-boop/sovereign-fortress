@@ -5,8 +5,14 @@
   "dns": {
     "servers": [
       {
+        "tag": "dns-direct",
+        "address": "local",
+        "detour": "direct"
+      },
+      {
         "tag": "dns-remote",
         "address": "https://dns.nextdns.io/<YOUR_NEXTDNS_ID>",
+        "address_resolver": "dns-direct",
         "detour": "proxy"
       }
     ],
@@ -22,8 +28,9 @@
     {
       "type": "tun",
       "tag": "tun-in",
-      "interface_name": "tun0",
-      "inet4_address": "172.19.0.1/30",
+      "address": [
+        "172.19.0.1/30"
+      ],
       "auto_route": true,
       "strict_route": true,
       "stack": "system",
@@ -35,13 +42,30 @@
       "type": "selector",
       "tag": "proxy",
       "outbounds": [
+        "auto-fastest",
         "Fortress-Reality-TCP",
         "Fortress-Hysteria2-Salamander",
         "Fortress-Hysteria2-Standard",
         "Fortress-TUIC5-UDP",
-        "Fortress-Shadowsocks2022"
+        "Fortress-Shadowsocks2022",
+        "Fortress-WireGuard-Native"
       ],
-      "default": "Fortress-Reality-TCP"
+      "default": "auto-fastest"
+    },
+    {
+      "type": "urltest",
+      "tag": "auto-fastest",
+      "outbounds": [
+        "Fortress-Reality-TCP",
+        "Fortress-Hysteria2-Salamander",
+        "Fortress-Hysteria2-Standard",
+        "Fortress-TUIC5-UDP",
+        "Fortress-Shadowsocks2022",
+        "Fortress-WireGuard-Native"
+      ],
+      "url": "https://www.google.com/generate_204",
+      "interval": "3m",
+      "tolerance": 50
     },
     {
       "type": "vless",
@@ -76,8 +100,7 @@
       },
       "tls": {
         "enabled": true,
-        "server_name": "www.microsoft.com",
-        "insecure": true,
+        "server_name": "gateway.icloud.com",
         "alpn": ["h3"]
       }
     },
@@ -89,8 +112,7 @@
       "password": "<YOUR_HYSTERIA2_PASSWORD>",
       "tls": {
         "enabled": true,
-        "server_name": "www.microsoft.com",
-        "insecure": true,
+        "server_name": "gateway.icloud.com",
         "alpn": ["h3"]
       }
     },
@@ -104,8 +126,7 @@
       "congestion_control": "bbr",
       "tls": {
         "enabled": true,
-        "server_name": "www.microsoft.com",
-        "insecure": true,
+        "server_name": "gateway.icloud.com",
         "alpn": ["h3"]
       }
     },
@@ -118,20 +139,26 @@
       "password": "<YOUR_SHADOWSOCKS_PASSWORD>"
     },
     {
-      "type": "direct",
-      "tag": "direct"
+      "type": "wireguard",
+      "tag": "Fortress-WireGuard-Native",
+      "server": "<YOUR_SERVER_IP>",
+      "server_port": 51820,
+      "local_address": [
+        "10.66.66.2/32"
+      ],
+      "private_key": "<YOUR_WG_CLIENT_PRIVATE_KEY>",
+      "peer_public_key": "<YOUR_WG_SERVER_PUBLIC_KEY>"
     },
     {
-      "type": "dns",
-      "tag": "dns-out"
+      "type": "direct",
+      "tag": "direct"
     }
   ],
   "route": {
     "auto_detect_interface": true,
     "rules": [
       {
-        "protocol": "dns",
-        "outbound": "dns-out"
+        "action": "hijack-dns"
       },
       {
         "outbound": "proxy"

@@ -79,7 +79,7 @@ def secure_shred(file_path: str):
                 f.flush()
                 os.fsync(f.fileno())
         os.remove(file_path)
-        print(f" [X] Cryptoshredded: {os.path.basename(file_path)}")
+        print(f" [X] Multi-pass overwritten and removed: {os.path.basename(file_path)}")
     except Exception as e:
         print(f" [-] Error shredding {file_path}: {e}")
 
@@ -98,11 +98,11 @@ def lock_vault():
             with open(enc_path, "wb") as f:
                 f.write(enc)
             secure_shred(path)
-            print(f" [+] Encrypted and zeroed: {os.path.basename(path)} -> {os.path.basename(enc_path)}")
+            print(f" [+] Encrypted and wiped: {os.path.basename(path)} -> {os.path.basename(enc_path)}")
             count += 1
         elif os.path.exists(enc_path):
             print(f" [=] Already locked: {os.path.basename(enc_path)}")
-    print(f"\n[OK] Vault Locked! {count} file(s) encrypted with hardware/login DPAPI.")
+    print(f"\n[OK] Vault Locked! {count} file(s) encrypted with Windows user-bound DPAPI (CryptProtectData).")
 
 def unlock_vault():
     print("=" * 60)
@@ -126,13 +126,13 @@ def unlock_vault():
                 print(f" [-] Failed to decrypt {os.path.basename(enc_path)}: {e}")
         elif os.path.exists(path):
             print(f" [=] Already unlocked: {os.path.basename(path)}")
-    print(f"\n[OK] Vault Unlocked! {count} file(s) restored and ready for use.")
+    print(f"\n[OK] Vault Unlocked! {count} file(s) restored into active workspace for VPN client operation.\nTip: Lock vault when VPN session is complete to prevent plaintext storage.")
 
 def panic_shred_local():
     print("=" * 60)
     print("   SOVEREIGN FORTRESS: LOCAL CLIENT EMERGENCY PANIC   ")
     print("=" * 60)
-    print("[!] WARNING: This will permanently vaporize all VPN configurations,")
+    print("[!] WARNING: This will permanently overwrite and delete all VPN configurations,")
     print("    private keys, QR codes, and SSH credentials from this computer.")
     confirm = input("Type 'VAPORIZE' to proceed: ").strip()
     if confirm != "VAPORIZE":
@@ -150,10 +150,10 @@ def panic_shred_local():
         for fname in os.listdir(qr_dir):
             all_files.append(os.path.join(qr_dir, fname))
 
-    print("\n[*] Commencing 3-Pass Cryptoshredding on all credentials...")
+    print("\n[*] Commencing Multi-Pass Overwrite & Cryptographic Key Erasure...")
     for f in all_files:
         secure_shred(f)
-    print("\n[OK] FORENSIC VAPORIZATION COMPLETE. All credentials eradicated.")
+    print("\n[OK] CREDENTIAL ERASURE COMPLETE. All local configurations and keys overwritten and removed.")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
