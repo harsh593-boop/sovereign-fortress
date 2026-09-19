@@ -86,7 +86,7 @@ PROTOCOLS = [
         "port_num": 9444,
         "badge": "Scrambled QUIC Anti-Throttling",
         "desc": "[Scrambled QUIC - Anti-Throttling] — ChaCha20 XOR packet header scrambler. Use when campus firewall throttles or drops standard QUIC/UDP.",
-        "link": f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:9444?sni={REALITY_SNI}&alpn=h3&obfs=salamander&obfs-password={SALAMANDER_PASS}{pin_param}#Fortress-Hysteria2-Salamander"
+        "link": f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:9444?insecure=1&sni=www.microsoft.com&alpn=h3&obfs=salamander&obfs-password={SALAMANDER_PASS}{pin_param}#Fortress-Hysteria2-Salamander"
     },
     {
         "name": "Fortress-Hysteria2-Standard",
@@ -95,7 +95,7 @@ PROTOCOLS = [
         "port_num": 8443,
         "badge": "Brutal BBR Maximum Speed 4K",
         "desc": "[Brutal BBR - Maximum Speed 4K] — Aggressive congestion control designed for lossy campus Wi-Fi. Delivers gigabit throughput for video and downloads.",
-        "link": f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:8443?sni={REALITY_SNI}&alpn=h3{pin_param}#Fortress-Hysteria2-Standard"
+        "link": f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:8443?insecure=1&sni=www.microsoft.com&alpn=h3{pin_param}#Fortress-Hysteria2-Standard"
     },
     {
         "name": "Fortress-TUIC5",
@@ -104,7 +104,7 @@ PROTOCOLS = [
         "port_num": 9443,
         "badge": "0-RTT Fast Mobile Roaming",
         "desc": "[0-RTT Fast Mobile Roaming] — Zero handshake latency when switching between campus Wi-Fi APs or mobile data on Android.",
-        "link": f"tuic://{UUID}:{HY2_PASSWORD}@{SERVER_IP}:9443?congestion_control=bbr&alpn=h3&sni={REALITY_SNI}{pin_param}#Fortress-TUIC5-UDP"
+        "link": f"tuic://{UUID}:{HY2_PASSWORD}@{SERVER_IP}:9443?congestion_control=bbr&alpn=h3&sni=www.microsoft.com&allow_insecure=1&insecure=1{pin_param}#Fortress-TUIC5-UDP"
     },
     {
         "name": "Fortress-Shadowsocks2022",
@@ -122,7 +122,7 @@ PROTOCOLS = [
         "port_num": 8080,
         "badge": "Captive Portal & TCP Slayer",
         "desc": "[Captive Portal & Strict TCP Slayer] — Wraps WireGuard inside HTTPS WebSockets (wstunnel) to bypass captive portals blocking UDP.",
-        "link": f"wstunnel://{SERVER_IP}:8080"
+        "link": f"wstunnel://{SERVER_IP}:8080?sni=www.microsoft.com&prefix=&tunnel=127.0.0.1:51820#Fortress-WireGuard-TCP"
     },
     {
         "name": "Native WireGuard",

@@ -1,21 +1,47 @@
-MIT License
+Proprietary Source-Available Software License & Copyright Notice
+Copyright (c) 2026 harsh593-boop. All Rights Reserved.
 
-Copyright (c) 2026 harsh593-boop
+================================================================================
+TERMS AND CONDITIONS FOR USE, EVALUATION, AND PERMISSION
+================================================================================
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1. GRANT OF EVALUATION AND PERSONAL USE RIGHTS:
+Subject to the terms and conditions of this Agreement, the author (harsh593-boop)
+hereby grants to any individual obtaining a copy of this software ("Sovereign Fortress")
+and associated documentation files (the "Software"), a non-exclusive, revocable, 
+non-transferable, limited license to inspect, evaluate, compile, and run the Software 
+SOLELY for personal, non-commercial, educational, and security evaluation purposes.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+2. STRICT COMMERCIAL RESTRICTION:
+Under NO circumstances may any person, company, academic institution, agency, or 
+commercial entity use, run, deploy, embed, host, offer as a managed service (SaaS, PaaS, 
+or VPN service), monetize, sell, sub-license, redistribute, or package this Software, 
+either in source code or binary form, without explicit, prior written permission 
+signed by harsh593-boop.
 
+3. MODIFICATIONS AND DERIVATIVE WORKS:
+You may modify this Software for personal, non-commercial private use only. 
+Public redistribution or publication of modified versions, forks, or derivative 
+works is strictly prohibited without prior written authorization from harsh593-boop. 
+All modifications and derivative works shall remain subject to this License and 
+must retain this copyright notice in full.
+
+4. STATUTORY COPYRIGHT RESERVATIONS & ENFORCEMENT:
+Full statutory rights are reserved under:
+  - The Indian Copyright Act, 1957 (as amended)
+  - United States Copyright Law & Digital Millennium Copyright Act (DMCA, 17 U.S.C. § 512)
+  - The Berne Convention for the Protection of Literary and Artistic Works
+  - The Universal Copyright Convention and applicable international copyright treaties.
+
+Unauthorized commercial exploitation, unauthorized redistribution, or failure to attribute 
+shall constitute willful infringement subject to civil damages, statutory penalties, 
+injunctive relief, and DMCA takedown actions.
+
+5. DISCLAIMER OF WARRANTY:
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHOR OR COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM,
+OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.

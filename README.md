@@ -1,7 +1,9 @@
 # Sovereign Fortress — Multi-Protocol Anti-Censorship & Zero-Trust VPN Suite (2026)
 
 [![Author: harsh593-boop](https://img.shields.io/badge/Author-harsh593--boop-blue.svg)](https://github.com/harsh593-boop)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[![License: Proprietary Source-Available](https://img.shields.io/badge/License-Proprietary%20Source--Available-red.svg)](LICENSE)
+[![Copyright: harsh593-boop](https://img.shields.io/badge/Copyright-(c)%202026%20harsh593--boop-blue.svg)](LICENSE)
+[![FDE Encryption](https://img.shields.io/badge/Full%20Disk%20Encryption-OCI%20AES--256%20%7C%20FIPS%20140--2-gold.svg)]()
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Android%20%7C%20Linux%20%7C%20iOS%20%7C%20macOS-emerald.svg)]()
 [![Free Tier](https://img.shields.io/badge/OCI%20Always%20Free-100%25%20%240%2Fmo-purple.svg)]()
 [![Censorship Resistance](https://img.shields.io/badge/Censorship%20Resistance-GFW%20%7C%20FortiGate%20%7C%20DPI%20Slayer-red.svg)]()
@@ -198,8 +200,37 @@ See [`yogadns_rules.md`](yogadns_rules.md) for full step-by-step instructions:
 
 ---
 
+## 🛡️ Full Disk Encryption (FDE) & Cryptographic Zeroization
+
+Sovereign Fortress implements a four-tier defense-in-depth cryptographic storage model protecting against physical seizure, raw hypervisor disk inspection, forensic data recovery, and local drive duplication:
+
+### 1. Hardware Full Disk Encryption at Rest (OCI Block Volume AES-256)
+* **Underlying Storage Encryption**: 100% of all data written to Oracle Cloud Infrastructure Block Volumes (including the root filesystem `/dev/sda` / `/dev/mapper/root`, boot volume, and swap space) is automatically and transparently encrypted at rest with hardware-accelerated **AES-256** encryption before committing to physical flash/NVMe media.
+* **FIPS 140-2 Level 2 Cryptographic Validation**: Encryption keys are generated, rotated, and managed in compliance with federal security standards. Even in catastrophic breach scenarios involving raw hardware detachment, storage array theft, or unauthorized cloud hypervisor volume snapshots, data on disk consists solely of high-entropy ciphertext indistinguishable from random noise.
+
+### 2. Ephemeral Volatile RAM Runtime (`/run/fortress` tmpfs)
+* **Zero Disk Footprint**: All sensitive runtime assets—including active subscription authentication tokens (`sub_token`), TOTP seeds (`totp_secret`), WireGuard private keys (`wg_client_priv`, `wg_server_priv`), TLS certificates and keys (`cert.pem`, `key.pem`), and Sing-box routing tables—are hosted exclusively in a kernel-managed volatile RAM disk (`tmpfs`) mounted at `/run/fortress`.
+* **Zero Forensic Disk Logging**: Systemd journal buffers for Sovereign Fortress services run with `Storage=volatile`, and sing-box logging is constrained to `warn`. No plaintext connection history, DNS queries, client IPs, or destination metrics are ever committed to non-volatile disk storage.
+* **Instant Cryptographic Zeroization on Power Loss**: RAM cells require continuous electric refresh. The instant the server instance is rebooted, terminated, or loses power, all volatile RAM charges dissipate in sub-seconds, physically and irrevocably obliterating all cryptographic session keys and access tokens.
+
+### 3. Client-Side Hardware Vault & DPAPI/TPM Sealing
+* **Windows DPAPI (`Protect-FortressVault.ps1`)**: On the local client machine, all connection profiles, subscription links, and TOTP secrets are encrypted using Windows Cryptographic Data Protection API (`CryptProtectData`).
+* **Hardware TPM Binding**: Vault ciphertexts are cryptographically tied to the authenticated user's hardware TPM (Trusted Platform Module) and login credentials. Offline drive cloning, rogue processes without user context, or physical storage theft cannot recover the credentials without an active user Windows session.
+
+### 4. Emergency Anti-Forensic Panic Switch (`Shred-Fortress.ps1`)
+* **Multi-Pass DOD 5220.22-M Overwrite**: In extreme threat environments, running `Shred-Fortress.ps1` executes pseudo-random cryptographic bit overwrites across all sensitive client files before physical file unlinking, preventing SSD/HDD forensic file carving.
+
+---
+
 ## 👤 Author
 Developed and maintained by **[harsh593-boop](https://github.com/harsh593-boop)**.
 
-## 📄 License
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+## 📄 License & Proprietary Copyright Notice
+
+**Copyright (c) 2026 harsh593-boop. All Rights Reserved.**
+
+This software is released under a **Proprietary Source-Available License**:
+* **Personal & Security Evaluation Use:** You are granted the right to inspect, audit, evaluate, and deploy Sovereign Fortress solely for private, non-commercial, personal anti-censorship use.
+* **Strict Commercial Prohibition:** Commercial use, SaaS/PaaS resale, managed VPN hosting, monetization, or unauthorized redistribution in source or binary form is **strictly prohibited** without explicit, prior written permission signed by **harsh593-boop**.
+* **Statutory Enforcement & Treaty Rights:** Full statutory rights reserved under the **Indian Copyright Act, 1957**, the **United States Digital Millennium Copyright Act (DMCA, 17 U.S.C. § 512)**, and international copyright conventions (Berne Convention, WIPO Copyright Treaty). Unauthorized distribution or commercial exploitation will result in immediate DMCA takedown actions and legal statutory damages.
+* For licensing inquiries, commercial permissions, or custom enterprise deployments, contact the author via [GitHub Issues / Discussion](https://github.com/harsh593-boop/sovereign-fortress).

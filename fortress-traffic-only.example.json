@@ -97,7 +97,8 @@
       },
       "tls": {
         "enabled": true,
-        "server_name": "gateway.icloud.com",
+        "server_name": "www.microsoft.com",
+        "insecure": true,
         "alpn": ["h3"],
         "certificate": [
           "<YOUR_CA_CERT_PEM>"
@@ -112,7 +113,8 @@
       "password": "<YOUR_HYSTERIA2_PASSWORD>",
       "tls": {
         "enabled": true,
-        "server_name": "gateway.icloud.com",
+        "server_name": "www.microsoft.com",
+        "insecure": true,
         "alpn": ["h3"],
         "certificate": [
           "<YOUR_CA_CERT_PEM>"
@@ -129,7 +131,8 @@
       "congestion_control": "bbr",
       "tls": {
         "enabled": true,
-        "server_name": "gateway.icloud.com",
+        "server_name": "www.microsoft.com",
+        "insecure": true,
         "alpn": ["h3"],
         "certificate": [
           "<YOUR_CA_CERT_PEM>"

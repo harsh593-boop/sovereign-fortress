@@ -138,7 +138,7 @@ REALITY_SNI="gateway.icloud.com"
 WG_SERVER_PRIV=$(wg genkey)
 WG_SERVER_PUB=$(echo "$WG_SERVER_PRIV" | wg pubkey)
 WG_CLIENT_PRIV=$(wg genkey)
-WG_CLIENT_PUB=$(echo "$WG_CLIENT_PUB" | wg pubkey)
+WG_CLIENT_PUB=$(echo "$WG_CLIENT_PRIV" | wg pubkey)
 
 # 7. Dedicated Private CA & Authenticated TLS Certificate
 echo "[*] Generating Dedicated Sovereign Private CA & Certificate..."
@@ -148,7 +148,7 @@ openssl req -x509 -newkey rsa:4096 -days 365 -nodes \
 
 openssl req -newkey rsa:2048 -nodes \
     -keyout "$DISK_DIR/key.pem" -out "$DISK_DIR/cert.csr" \
-    -subj "/CN=gateway.icloud.com" >/dev/null 2>&1
+    -subj "/CN=www.microsoft.com" >/dev/null 2>&1
 
 openssl x509 -req -in "$DISK_DIR/cert.csr" \
     -CA "$DISK_DIR/ca.crt" -CAkey "$DISK_DIR/ca.key" -CAcreateserial \
@@ -323,12 +323,12 @@ cat <<EOF > "$RAM_DIR/config.json"
       "tag": "wg-in",
       "listen": "0.0.0.0",
       "listen_port": 51820,
-      "local_address": ["10.66.66.1/24"],
+      "local_address": ["10.8.0.1/24"],
       "private_key": "${WG_SERVER_PRIV}",
       "peers": [
         {
           "public_key": "${WG_CLIENT_PUB}",
-          "allowed_ips": ["10.66.66.2/32"]
+          "allowed_ips": ["10.8.0.2/32"]
         }
       ]
     }
@@ -589,7 +589,8 @@ cat <<EOF > "$DISK_DIR/fortress_config.json"
   "ss_password": "${SS_PASS}",
   "wg_server_pub": "${WG_SERVER_PUB}",
   "wg_client_priv": "${WG_CLIENT_PRIV}",
-  "wg_client_ip": "10.66.66.2",
+  "wg_client_ip": "10.8.0.2",
+  "wstunnel_port": 8080,
   "cert_sha256": "${CERT_SHA256}",
   "pin_sha256": "${PIN_SHA256}"
 }
@@ -600,14 +601,14 @@ cp "$DISK_DIR/fortress_config.json" "$RAM_DIR/fortress_config.json"
 cat <<EOF > "$RAM_DIR/fortress-wireguard.conf"
 [Interface]
 PrivateKey = ${WG_CLIENT_PRIV}
-Address = 10.66.66.2/24
-# DNS is routed to Unbound or managed by YogaDNS
-DNS = 10.66.66.1
+Address = 10.8.0.2/24
+DNS = 1.1.1.1, 8.8.8.8
+MTU = 1360
 
 [Peer]
 PublicKey = ${WG_SERVER_PUB}
 Endpoint = ${SERVER_IP}:51820
-AllowedIPs = 0.0.0.0/0
+AllowedIPs = 0.0.0.0/0, ::/0
 PersistentKeepalive = 15
 EOF
 
@@ -615,14 +616,14 @@ EOF
 cat <<EOF > "$RAM_DIR/fortress-wireguard-tcp.conf"
 [Interface]
 PrivateKey = ${WG_CLIENT_PRIV}
-Address = 10.66.66.2/24
-DNS = 10.66.66.1
+Address = 10.8.0.2/24
+DNS = 1.1.1.1, 8.8.8.8
 MTU = 1360
 
 [Peer]
 PublicKey = ${WG_SERVER_PUB}
 Endpoint = 127.0.0.1:51820
-AllowedIPs = 0.0.0.0/0
+AllowedIPs = 0.0.0.0/0, ::/0
 PersistentKeepalive = 15
 EOF
 

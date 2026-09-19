@@ -86,13 +86,13 @@ auto-fastest: Automatically measures latency to all proxies and detours to the l
 vless://<YOUR_UUID>@<YOUR_SERVER_IP>:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=gateway.icloud.com&fp=chrome&pbk=<YOUR_REALITY_PUBLIC_KEY>&sid=<YOUR_REALITY_SHORT_ID>&type=tcp&headerType=none#Fortress-Reality-TCP
 
 [Protocol 2: Hysteria 2 Salamander UDP Port 9444 - QUIC Packet Scrambler]
-hysteria2://<YOUR_HYSTERIA2_PASSWORD>@<YOUR_SERVER_IP>:9444?sni=gateway.icloud.com&alpn=h3&obfs=salamander&obfs-password=<YOUR_SALAMANDER_PASSWORD>&pinSHA256=<YOUR_CERT_PIN_SHA256>#Fortress-Hysteria2-Salamander
+hysteria2://<YOUR_HYSTERIA2_PASSWORD>@<YOUR_SERVER_IP>:9444?insecure=1&sni=www.microsoft.com&alpn=h3&obfs=salamander&obfs-password=<YOUR_SALAMANDER_PASSWORD>&pinSHA256=<YOUR_CERT_PIN_SHA256>#Fortress-Hysteria2-Salamander
 
 [Protocol 3: Hysteria 2 Standard UDP Port 8443 - Brutal BBR Speed Champion]
-hysteria2://<YOUR_HYSTERIA2_PASSWORD>@<YOUR_SERVER_IP>:8443?sni=gateway.icloud.com&alpn=h3&pinSHA256=<YOUR_CERT_PIN_SHA256>#Fortress-Hysteria2-Standard
+hysteria2://<YOUR_HYSTERIA2_PASSWORD>@<YOUR_SERVER_IP>:8443?insecure=1&sni=www.microsoft.com&alpn=h3&pinSHA256=<YOUR_CERT_PIN_SHA256>#Fortress-Hysteria2-Standard
 
 [Protocol 4: TUIC v5 UDP Port 9443 - 0-RTT Rapid Mobile Reconnect]
-tuic://<YOUR_UUID>:<YOUR_HYSTERIA2_PASSWORD>@<YOUR_SERVER_IP>:9443?congestion_control=bbr&alpn=h3&sni=gateway.icloud.com&pinSHA256=<YOUR_CERT_PIN_SHA256>#Fortress-TUIC5-UDP
+tuic://<YOUR_UUID>:<YOUR_HYSTERIA2_PASSWORD>@<YOUR_SERVER_IP>:9443?congestion_control=bbr&alpn=h3&sni=www.microsoft.com&allow_insecure=1&pinSHA256=<YOUR_CERT_PIN_SHA256>#Fortress-TUIC5-UDP
 
 [Protocol 5: Shadowsocks-2022 TCP/UDP Port 10443 - AEAD Anti-Probing Proxy]
 ss://MjAyMi1ibGFrZTMtYWVzLTI1Ni1nY206<YOUR_SHADOWSOCKS_KEY>@<YOUR_SERVER_IP>:10443#Fortress-Shadowsocks2022
