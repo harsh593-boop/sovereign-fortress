@@ -1,43 +1,58 @@
-Proprietary Source-Available Software License & Copyright Notice
+================================================================================
+PROPRIETARY SOURCE-AVAILABLE SOFTWARE LICENSE & COPYRIGHT NOTICE
+================================================================================
 Copyright (c) 2026 harsh593-boop. All Rights Reserved.
+Official Author & Copyright Owner: harsh593-boop
+GitHub Profile: https://github.com/harsh593-boop
+GitHub User ID: 178499568
+Official Repository: https://github.com/harsh593-boop/sovereign-fortress
 
 ================================================================================
 TERMS AND CONDITIONS FOR USE, EVALUATION, AND PERMISSION
 ================================================================================
 
-1. GRANT OF EVALUATION AND PERSONAL USE RIGHTS:
-Subject to the terms and conditions of this Agreement, the author (harsh593-boop)
-hereby grants to any individual obtaining a copy of this software ("Sovereign Fortress")
-and associated documentation files (the "Software"), a non-exclusive, revocable, 
-non-transferable, limited license to inspect, evaluate, compile, and run the Software 
-SOLELY for personal, non-commercial, educational, and security evaluation purposes.
+1. OWNERSHIP & COPYRIGHT NOTICE:
+This software ("Sovereign Fortress") and all associated scripts, architecture designs, 
+configurations, documentation, and source code are the proprietary intellectual property 
+of harsh593-boop. Ownership is protected internationally by the Berne Convention for 
+the Protection of Literary and Artistic Works, the Indian Copyright Act of 1957, the 
+United States Copyright Act, the Digital Millennium Copyright Act (DMCA, 17 U.S.C. § 512), 
+and applicable copyright treaties worldwide.
 
-2. STRICT COMMERCIAL RESTRICTION:
-Under NO circumstances may any person, company, academic institution, agency, or 
-commercial entity use, run, deploy, embed, host, offer as a managed service (SaaS, PaaS, 
-or VPN service), monetize, sell, sub-license, redistribute, or package this Software, 
-either in source code or binary form, without explicit, prior written permission 
-signed by harsh593-boop.
+2. GRANT OF PERSONAL & EVALUATION USE:
+Subject to strict compliance with this Agreement, the copyright owner (harsh593-boop) 
+grants to you a personal, non-exclusive, non-transferable, revocable, royalty-free license 
+to view, download, compile, and run the Software SOLELY for:
+  (a) Personal, individual, private non-commercial anti-censorship use;
+  (b) Academic study, security auditing, and educational research.
 
-3. MODIFICATIONS AND DERIVATIVE WORKS:
-You may modify this Software for personal, non-commercial private use only. 
-Public redistribution or publication of modified versions, forks, or derivative 
-works is strictly prohibited without prior written authorization from harsh593-boop. 
-All modifications and derivative works shall remain subject to this License and 
-must retain this copyright notice in full.
+3. STRICT PROHIBITION ON COMMERCIAL EXPLOITATION:
+Under NO circumstances may any individual, company, corporate entity, commercial organization, 
+or managed service provider:
+  (a) Sell, rent, lease, sublicense, monetize, distribute, or commercially package this 
+      Software or any part thereof;
+  (b) Host or operate this Software as a commercial paid VPN, proxy, SaaS, PaaS, or cloud 
+      service for paying customers;
+  (c) Incorporate this Software into proprietary closed-source commercial products or hardware 
+      appliances;
+without explicit, prior, formal written authorization and licensing executed directly by 
+harsh593-boop.
 
-4. STATUTORY COPYRIGHT RESERVATIONS & ENFORCEMENT:
-Full statutory rights are reserved under:
-  - The Indian Copyright Act, 1957 (as amended)
-  - United States Copyright Law & Digital Millennium Copyright Act (DMCA, 17 U.S.C. § 512)
-  - The Berne Convention for the Protection of Literary and Artistic Works
-  - The Universal Copyright Convention and applicable international copyright treaties.
+4. DERIVATIVE WORKS & REDISTRIBUTION:
+Private modifications for individual use are permitted. However, public redistribution, 
+mirroring, republishing, or creating public forks for commercial purposes or without 
+retaining this copyright notice in its entirety is strictly prohibited. Any permitted copy 
+or fork must prominently retain this full Copyright Notice and attribution to harsh593-boop.
 
-Unauthorized commercial exploitation, unauthorized redistribution, or failure to attribute 
-shall constitute willful infringement subject to civil damages, statutory penalties, 
-injunctive relief, and DMCA takedown actions.
+5. ENFORCEMENT & DMCA TAKEDOWNS:
+Any unauthorized commercial use, redistribution without authorization, or breach of these 
+terms constitutes willful copyright infringement. The copyright owner reserves the right to:
+  (a) Issue immediate DMCA takedown notices to GitHub, host providers, and domain registrars 
+      pursuant to 17 U.S.C. § 512;
+  (b) Pursue statutory damages, injunctive relief, and legal costs under applicable copyright 
+      laws.
 
-5. DISCLAIMER OF WARRANTY:
+6. DISCLAIMER OF WARRANTY:
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE
