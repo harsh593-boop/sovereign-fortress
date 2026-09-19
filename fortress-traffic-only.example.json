@@ -1,0 +1,171 @@
+{
+  "log": {
+    "level": "warn"
+  },
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-direct",
+        "address": "local",
+        "detour": "direct"
+      },
+      {
+        "tag": "dns-remote",
+        "address": "https://dns.nextdns.io/<YOUR_NEXTDNS_ID>",
+        "detour": "proxy"
+      }
+    ],
+    "rules": [
+      {
+        "domain_suffix": [
+          ".campus.internal",
+          ".local",
+          ".internal"
+        ],
+        "server": "dns-direct"
+      },
+      {
+        "outbound": "any",
+        "server": "dns-remote"
+      }
+    ],
+    "strategy": "prefer_ipv4"
+  },
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "interface_name": "tun0",
+      "inet4_address": "172.19.0.1/30",
+      "auto_route": true,
+      "strict_route": true,
+      "stack": "system",
+      "sniff": true
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "selector",
+      "tag": "proxy",
+      "outbounds": [
+        "Fortress-Reality-TCP",
+        "Fortress-Hysteria2-Salamander",
+        "Fortress-Hysteria2-Standard",
+        "Fortress-TUIC5-UDP",
+        "Fortress-Shadowsocks2022"
+      ],
+      "default": "Fortress-Reality-TCP"
+    },
+    {
+      "type": "vless",
+      "tag": "Fortress-Reality-TCP",
+      "server": "<YOUR_SERVER_IP>",
+      "server_port": 443,
+      "uuid": "<YOUR_CLIENT_UUID>",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "gateway.icloud.com",
+        "reality": {
+          "enabled": true,
+          "public_key": "<YOUR_REALITY_PUBLIC_KEY>",
+          "short_id": "<YOUR_REALITY_SHORT_ID>"
+        },
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      }
+    },
+    {
+      "type": "hysteria2",
+      "tag": "Fortress-Hysteria2-Salamander",
+      "server": "<YOUR_SERVER_IP>",
+      "server_port": 9444,
+      "password": "<YOUR_HYSTERIA2_PASSWORD>",
+      "obfs": {
+        "type": "salamander",
+        "password": "<YOUR_SALAMANDER_PASSWORD>"
+      },
+      "tls": {
+        "enabled": true,
+        "server_name": "www.microsoft.com",
+        "insecure": true,
+        "alpn": ["h3"]
+      }
+    },
+    {
+      "type": "hysteria2",
+      "tag": "Fortress-Hysteria2-Standard",
+      "server": "<YOUR_SERVER_IP>",
+      "server_port": 8443,
+      "password": "<YOUR_HYSTERIA2_PASSWORD>",
+      "tls": {
+        "enabled": true,
+        "server_name": "www.microsoft.com",
+        "insecure": true,
+        "alpn": ["h3"]
+      }
+    },
+    {
+      "type": "tuic",
+      "tag": "Fortress-TUIC5-UDP",
+      "server": "<YOUR_SERVER_IP>",
+      "server_port": 9443,
+      "uuid": "<YOUR_CLIENT_UUID>",
+      "password": "<YOUR_HYSTERIA2_PASSWORD>",
+      "congestion_control": "bbr",
+      "tls": {
+        "enabled": true,
+        "server_name": "www.microsoft.com",
+        "insecure": true,
+        "alpn": ["h3"]
+      }
+    },
+    {
+      "type": "shadowsocks",
+      "tag": "Fortress-Shadowsocks2022",
+      "server": "<YOUR_SERVER_IP>",
+      "server_port": 10443,
+      "method": "2022-blake3-aes-256-gcm",
+      "password": "<YOUR_SHADOWSOCKS_PASSWORD>"
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    },
+    {
+      "type": "dns",
+      "tag": "dns-out"
+    }
+  ],
+  "route": {
+    "auto_detect_interface": true,
+    "rules": [
+      {
+        "protocol": "dns",
+        "outbound": "dns-out"
+      },
+      {
+        "domain_suffix": [
+          ".campus.internal",
+          ".local",
+          ".internal"
+        ],
+        "outbound": "direct"
+      },
+      {
+        "ip_cidr": [
+          "10.0.0.0/8",
+          "172.16.0.0/12",
+          "192.168.0.0/16",
+          "127.0.0.0/8"
+        ],
+        "outbound": "direct"
+      },
+      {
+        "outbound": "proxy"
+      }
+    ]
+  }
+}
