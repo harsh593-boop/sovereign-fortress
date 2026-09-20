@@ -50,13 +50,17 @@ if ($Action -eq "Lock") {
     Write-Host "==========================================================" -ForegroundColor Cyan
     Write-Host "[*] Encrypting sensitive configuration files and private keys at rest..." -ForegroundColor Gray
 
+    $entropySeed = "$($env:USERNAME):$($env:COMPUTERNAME):SovereignFortressVault2026"
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $VaultEntropy = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($entropySeed))
+
     $lockedCount = 0
     foreach ($file in $TargetFiles) {
         if (Test-Path $file) {
             $rawBytes = [System.IO.File]::ReadAllBytes($file)
             $encryptedBytes = [System.Security.Cryptography.ProtectedData]::Protect(
                 $rawBytes,
-                $null,
+                $VaultEntropy,
                 [System.Security.Cryptography.DataProtectionScope]::CurrentUser
             )
             $encPath = "$file.enc"
@@ -68,7 +72,7 @@ if ($Action -eq "Lock") {
             Write-Host " [=] Already locked: $(Split-Path $file -Leaf).enc" -ForegroundColor DarkGray
         }
     }
-    Write-Host "`n[✓] Vault Locked! $lockedCount file(s) encrypted with Windows DPAPI (tied to your Windows login)." -ForegroundColor Green
+    Write-Host "`n[✓] Vault Locked! $lockedCount file(s) encrypted with Windows DPAPI (tied to your Windows login + machine entropy)." -ForegroundColor Green
 }
 elseif ($Action -eq "Unlock") {
     Write-Host "==========================================================" -ForegroundColor Cyan
@@ -76,17 +80,30 @@ elseif ($Action -eq "Unlock") {
     Write-Host "==========================================================" -ForegroundColor Cyan
     Write-Host "[*] Decrypting sensitive configuration files for active session..." -ForegroundColor Gray
 
+    $entropySeed = "$($env:USERNAME):$($env:COMPUTERNAME):SovereignFortressVault2026"
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $VaultEntropy = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($entropySeed))
+
     $unlockedCount = 0
     foreach ($file in $TargetFiles) {
         $encPath = "$file.enc"
         if (Test-Path $encPath) {
             $encBytes = [System.IO.File]::ReadAllBytes($encPath)
             try {
-                $decryptedBytes = [System.Security.Cryptography.ProtectedData]::Unprotect(
-                    $encBytes,
-                    $null,
-                    [System.Security.Cryptography.DataProtectionScope]::CurrentUser
-                )
+                try {
+                    $decryptedBytes = [System.Security.Cryptography.ProtectedData]::Unprotect(
+                        $encBytes,
+                        $VaultEntropy,
+                        [System.Security.Cryptography.DataProtectionScope]::CurrentUser
+                    )
+                } catch {
+                    # Fallback to null entropy for backwards compatibility
+                    $decryptedBytes = [System.Security.Cryptography.ProtectedData]::Unprotect(
+                        $encBytes,
+                        $null,
+                        [System.Security.Cryptography.DataProtectionScope]::CurrentUser
+                    )
+                }
                 [System.IO.File]::WriteAllBytes($file, $decryptedBytes)
                 Remove-Item -Path $encPath -Force
                 Write-Host " [+] Decrypted and restored: $(Split-Path $file -Leaf)" -ForegroundColor Green

@@ -335,12 +335,19 @@ class SovereignApp(tk.Tk):
                     time.sleep(0.2)
             else:
                 try:
+                    # Measure true network round-trip latency to the server host while verifying UDP socket path
                     t0 = time.time()
-                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                    s.settimeout(2.5)
-                    s.sendto(b"\x00\x00\x00\x00", (host, port))
-                    s.close()
-                    return (time.time() - t0) * 1000.0
+                    s_udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    s_udp.settimeout(1.5)
+                    s_udp.sendto(b"\x00\x00\x00\x00", (host, port))
+                    s_udp.close()
+
+                    s_tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s_tcp.settimeout(2.5)
+                    s_tcp.connect((host, 443))
+                    t1 = time.time()
+                    s_tcp.close()
+                    return (t1 - t0) * 1000.0
                 except Exception:
                     time.sleep(0.2)
         return None

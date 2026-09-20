@@ -462,8 +462,7 @@ ProtectSystem=strict
 ProtectHome=true
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
-ReadWritePaths=${RAM_DIR}
-ReadOnlyPaths=${DISK_DIR} /home/ubuntu
+ReadWritePaths=${RAM_DIR} ${DISK_DIR}
 
 [Install]
 WantedBy=multi-user.target
@@ -480,6 +479,12 @@ cp -f ${DISK_DIR}/cert.pem ${RAM_DIR}/cert.pem 2>/dev/null || true
 cp -f ${DISK_DIR}/ca.crt ${RAM_DIR}/ca.crt 2>/dev/null || true
 cp -f ${DISK_DIR}/config.json.template ${RAM_DIR}/config.json 2>/dev/null || true
 cp -f ${DISK_DIR}/fortress_config.json ${RAM_DIR}/fortress_config.json 2>/dev/null || true
+if [ -f /home/ubuntu/.google_authenticator ]; then
+    head -n 1 /home/ubuntu/.google_authenticator > ${RAM_DIR}/totp_secret
+    cp -f ${RAM_DIR}/totp_secret ${DISK_DIR}/totp_secret 2>/dev/null || true
+    chmod 600 ${RAM_DIR}/totp_secret ${DISK_DIR}/totp_secret 2>/dev/null || true
+    chown ${FORTRESS_USER}:${FORTRESS_USER} ${RAM_DIR}/totp_secret ${DISK_DIR}/totp_secret 2>/dev/null || true
+fi
 chown -R ${FORTRESS_USER}:${FORTRESS_USER} ${RAM_DIR}
 chmod 700 ${RAM_DIR}
 chmod 600 ${RAM_DIR}/* 2>/dev/null || true

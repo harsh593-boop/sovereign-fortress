@@ -36,6 +36,6 @@ echo.
 echo Press Ctrl+C to stop the tunnel.
 echo.
 
-wstunnel.exe client -L udp://127.0.0.1:51820:127.0.0.1:51820 --tls-sni-override www.microsoft.com --tls-verify-certificate false wss://%SERVER_IP%:8080
+wstunnel.exe client -L udp://127.0.0.1:51820:127.0.0.1:51820 --tls-sni-override www.microsoft.com wss://%SERVER_IP%:8080
 
 pause

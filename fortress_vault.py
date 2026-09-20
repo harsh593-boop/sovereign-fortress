@@ -9,30 +9,52 @@ import glob
 import ctypes
 from ctypes import wintypes
 import secrets
+import hashlib
 
 class DATA_BLOB(ctypes.Structure):
     _fields_ = [('cbData', wintypes.DWORD), ('pbData', ctypes.POINTER(ctypes.c_byte))]
 
-def dpapi_protect(data: bytes, description: str = "SovereignFortressKey") -> bytes:
+def get_vault_entropy(custom_pass: str = None) -> bytes:
+    if custom_pass:
+        return hashlib.sha256(custom_pass.encode("utf-8")).digest()
+    user = os.environ.get("USERNAME", "DefaultUser")
+    comp = os.environ.get("COMPUTERNAME", "DefaultHost")
+    seed = f"{user}:{comp}:SovereignFortressVault2026"
+    return hashlib.sha256(seed.encode("utf-8")).digest()
+
+def dpapi_protect(data: bytes, entropy: bytes = None, description: str = "SovereignFortressKey") -> bytes:
+    if entropy is None:
+        entropy = get_vault_entropy()
     in_blob = DATA_BLOB(len(data), ctypes.cast(ctypes.create_string_buffer(data, len(data)), ctypes.POINTER(ctypes.c_byte)))
     out_blob = DATA_BLOB()
-    # CryptProtectData with current user scope (0)
-    if not ctypes.windll.crypt32.CryptProtectData(ctypes.byref(in_blob), description, None, None, None, 0, ctypes.byref(out_blob)):
+    ent_blob = DATA_BLOB(len(entropy), ctypes.cast(ctypes.create_string_buffer(entropy, len(entropy)), ctypes.POINTER(ctypes.c_byte)))
+    # CryptProtectData with current user scope and secondary entropy
+    if not ctypes.windll.crypt32.CryptProtectData(ctypes.byref(in_blob), description, ctypes.byref(ent_blob), None, None, 0, ctypes.byref(out_blob)):
         raise ctypes.WinError()
     buf = (ctypes.c_byte * out_blob.cbData)()
     ctypes.memmove(buf, out_blob.pbData, out_blob.cbData)
     ctypes.windll.kernel32.LocalFree(out_blob.pbData)
     return bytes(buf)
 
-def dpapi_unprotect(data: bytes) -> bytes:
+def dpapi_unprotect(data: bytes, entropy: bytes = None) -> bytes:
+    if entropy is None:
+        entropy = get_vault_entropy()
     in_blob = DATA_BLOB(len(data), ctypes.cast(ctypes.create_string_buffer(data, len(data)), ctypes.POINTER(ctypes.c_byte)))
     out_blob = DATA_BLOB()
-    if not ctypes.windll.crypt32.CryptUnprotectData(ctypes.byref(in_blob), None, None, None, None, 0, ctypes.byref(out_blob)):
-        raise ctypes.WinError()
-    buf = (ctypes.c_byte * out_blob.cbData)()
-    ctypes.memmove(buf, out_blob.pbData, out_blob.cbData)
-    ctypes.windll.kernel32.LocalFree(out_blob.pbData)
-    return bytes(buf)
+    ent_blob = DATA_BLOB(len(entropy), ctypes.cast(ctypes.create_string_buffer(entropy, len(entropy)), ctypes.POINTER(ctypes.c_byte)))
+    # 1. Try with secondary entropy
+    if ctypes.windll.crypt32.CryptUnprotectData(ctypes.byref(in_blob), None, ctypes.byref(ent_blob), None, None, 0, ctypes.byref(out_blob)):
+        buf = (ctypes.c_byte * out_blob.cbData)()
+        ctypes.memmove(buf, out_blob.pbData, out_blob.cbData)
+        ctypes.windll.kernel32.LocalFree(out_blob.pbData)
+        return bytes(buf)
+    # 2. Backwards-compatible fallback with null entropy
+    if ctypes.windll.crypt32.CryptUnprotectData(ctypes.byref(in_blob), None, None, None, None, 0, ctypes.byref(out_blob)):
+        buf = (ctypes.c_byte * out_blob.cbData)()
+        ctypes.memmove(buf, out_blob.pbData, out_blob.cbData)
+        ctypes.windll.kernel32.LocalFree(out_blob.pbData)
+        return bytes(buf)
+    raise ctypes.WinError()
 
 def get_target_files():
     base_dir = os.path.dirname(os.path.abspath(__file__))
