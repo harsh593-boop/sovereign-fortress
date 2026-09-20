@@ -38,11 +38,9 @@ askpass.*
 
 # Internal Admin & Migration Scripts
 check_reality_pubkey.py
-comprehensive_verification.py
 configure_fortress_server.py
 connect_singbox_to_unbound.py
 create_desktop_shortcuts.py
-deep_adversarial_verification.py
 deploy.ps1
 deploy.py
 deploy_and_verify_all.py

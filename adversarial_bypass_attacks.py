@@ -59,12 +59,30 @@ def get_current_totp(secret_str):
     except Exception:
         return None
 
+def reset_rate_limit_counter():
+    """Issue authenticated GET /sub/{TOKEN} to clear failed attempts counter on server"""
+    if not TOKEN:
+        return
+    try:
+        conn = http.client.HTTPConnection(SERVER_IP, SUB_PORT, timeout=4)
+        conn.request("GET", f"/sub/{TOKEN}", headers={"User-Agent": "RedTeam-Harness-Reset/1.0"})
+        resp = conn.getresponse()
+        resp.read()
+        conn.close()
+    except Exception:
+        pass
+
 def test_totp_replay_attack():
     print("\n--- ATTACK 1: RFC 6238 TOTP REPLAY & CONCURRENCY RACE ---")
     if not TOTP_SECRET:
         print("[!] SKIP: No TOTP secret configured locally.")
         return False
     
+    t = int(time.time())
+    wait = 30 - (t % 30) + 2
+    print(f"[*] Synchronizing with fresh TOTP window ({wait}s)...", flush=True)
+    time.sleep(wait)
+
     code = get_current_totp(TOTP_SECRET)
     if not code:
         print("[-] FAIL: Could not generate valid TOTP.")
@@ -73,7 +91,7 @@ def test_totp_replay_attack():
     print(f"[*] Generated valid TOTP code: {code}")
     print(f"[*] Submitting initial request to /sub/{code}...")
 
-    conn = http.client.HTTPConnection(SERVER_IP, SUB_PORT, timeout=5)
+    conn = http.client.HTTPConnection(SERVER_IP, SUB_PORT, timeout=10)
     conn.request("GET", f"/sub/{code}", headers={"User-Agent": "RedTeam-Probe/1.0"})
     resp1 = conn.getresponse()
     status1 = resp1.status
@@ -85,7 +103,7 @@ def test_totp_replay_attack():
         print(f"[-] Initial request failed with HTTP {status1}. Waiting for next time step...")
         time.sleep(30 - (int(time.time()) % 30) + 2)
         code = get_current_totp(TOTP_SECRET)
-        conn = http.client.HTTPConnection(SERVER_IP, SUB_PORT, timeout=5)
+        conn = http.client.HTTPConnection(SERVER_IP, SUB_PORT, timeout=10)
         conn.request("GET", f"/sub/{code}", headers={"User-Agent": "RedTeam-Probe/1.0"})
         resp1 = conn.getresponse()
         status1 = resp1.status
@@ -94,7 +112,7 @@ def test_totp_replay_attack():
         print(f"[+] Retry attempt: HTTP {status1}, bytes: {len(body1)}")
 
     print("[*] Immediately attempting sequential REPLAY with same TOTP code...")
-    conn = http.client.HTTPConnection(SERVER_IP, SUB_PORT, timeout=5)
+    conn = http.client.HTTPConnection(SERVER_IP, SUB_PORT, timeout=10)
     conn.request("GET", f"/sub/{code}", headers={"User-Agent": "RedTeam-Probe/1.0"})
     resp2 = conn.getresponse()
     status2 = resp2.status
@@ -156,9 +174,12 @@ def test_ip_spoofing_attack():
             resp = conn.getresponse()
             resp.read()
             conn.close()
+            # Clear counter after probe so runner IP never reaches MAX_FAILED (5) threshold
+            reset_rate_limit_counter()
         except Exception:
             pass
     print("[+] Verified: Server relies on socket address, not user-controllable headers.")
+    reset_rate_limit_counter()
     return True
 
 def test_path_traversal_and_methods():
@@ -196,6 +217,7 @@ def test_path_traversal_and_methods():
             print(f"[+] Verb {v} returned HTTP {resp.status} -> Location: {loc}")
         except Exception as e:
             print(f"[*] Verb {v} error: {e}")
+    reset_rate_limit_counter()
 
 def test_reality_handshake():
     print("\n--- ATTACK 4: REALITY TLS 1.3 HANDSHAKE (TCP 443) ---")
@@ -287,12 +309,17 @@ if __name__ == "__main__":
     print("      SOVEREIGN FORTRESS: ADVERSARIAL BYPASS RED-TEAM HARNESS        ")
     print("======================================================================")
     
+    reset_rate_limit_counter()
     totp_vuln = test_totp_replay_attack()
+    reset_rate_limit_counter()
     test_ip_spoofing_attack()
+    reset_rate_limit_counter()
     test_path_traversal_and_methods()
+    reset_rate_limit_counter()
     test_reality_handshake()
     test_wstunnel_handshake()
     test_csrf_token_rotation()
+    reset_rate_limit_counter()
 
     print("\n======================================================================")
     print("RED-TEAM SUMMARY:")

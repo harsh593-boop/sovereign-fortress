@@ -317,20 +317,6 @@ cat <<EOF > "$RAM_DIR/config.json"
       "listen_port": 10443,
       "method": "2022-blake3-aes-256-gcm",
       "password": "${SS_PASS}"
-    },
-    {
-      "type": "wireguard",
-      "tag": "wg-in",
-      "listen": "0.0.0.0",
-      "listen_port": 51820,
-      "local_address": ["10.8.0.1/24"],
-      "private_key": "${WG_SERVER_PRIV}",
-      "peers": [
-        {
-          "public_key": "${WG_CLIENT_PUB}",
-          "allowed_ips": ["10.8.0.2/32"]
-        }
-      ]
     }
   ],
   "outbounds": [
@@ -351,7 +337,7 @@ cat <<EOF > "$RAM_DIR/config.json"
         "outbound": "direct"
       },
       {
-        "inbound": ["vless-reality-in", "hy2-sal-in", "hy2-std-in", "tuic-in", "ss-in", "wg-in"],
+        "inbound": ["vless-reality-in", "hy2-sal-in", "hy2-std-in", "tuic-in", "ss-in"],
         "outbound": "direct"
       }
     ]
@@ -381,9 +367,9 @@ RestartSec=3
 LimitNOFILE=65535
 MemoryMax=512M
 
-# Linux Capabilities for Network Routing & Raw Sockets (No Root Needed)
-AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_RAW
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_RAW
+# Linux Capabilities for Port 443 (<1024) Binding Only (Kernel WireGuard handles TUN)
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 
 # Systemd Security Sandboxing Directives
 NoNewPrivileges=true
@@ -462,33 +448,82 @@ ProtectSystem=strict
 ProtectHome=true
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
-ReadWritePaths=${RAM_DIR} ${DISK_DIR}
+ReadOnlyPaths=${DISK_DIR}
+ReadWritePaths=${RAM_DIR}
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
 # 13. Systemd Boot RAM Initializer (Restores RAM templates on reboot)
+cat <<EOF > "$DISK_DIR/wg0.conf"
+[Interface]
+Address = 10.8.0.1/24
+ListenPort = 51820
+PrivateKey = ${WG_SERVER_PRIV}
+PostUp = iptables -I FORWARD 1 -m state --state RELATED,ESTABLISHED -j ACCEPT; iptables -I FORWARD 2 -i wg0 -j ACCEPT; iptables -I FORWARD 3 -o wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o ens3 -j MASQUERADE || iptables -t nat -A POSTROUTING -j MASQUERADE
+PostDown = iptables -D FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT || true; iptables -D FORWARD -i wg0 -j ACCEPT || true; iptables -D FORWARD -o wg0 -j ACCEPT || true; iptables -t nat -D POSTROUTING -o ens3 -j MASQUERADE || true
+
+[Peer]
+PublicKey = ${WG_CLIENT_PUB}
+AllowedIPs = 10.8.0.2/32
+EOF
+chmod 600 "$DISK_DIR/wg0.conf"
+chown root:root "$DISK_DIR/wg0.conf"
+
 cat <<EOF > /usr/local/bin/fortress-init.sh
 #!/usr/bin/env bash
-set -e
-mkdir -p ${RAM_DIR}
-mountpoint -q ${RAM_DIR} || mount -t tmpfs -o size=256M,mode=0700 tmpfs ${RAM_DIR}
+set -euo pipefail
+
+# Ensure tmpfs mount on ${RAM_DIR}
+if ! mountpoint -q ${RAM_DIR}; then
+    mkdir -p ${RAM_DIR}
+    mount -t tmpfs -o size=256M,mode=0700 tmpfs ${RAM_DIR}
+fi
+
+chmod 700 ${RAM_DIR}
+chown ${FORTRESS_USER}:${FORTRESS_USER} ${RAM_DIR}
+
+mkdir -p ${RAM_DIR}/client
+chown ${FORTRESS_USER}:${FORTRESS_USER} ${RAM_DIR}/client
+chmod 700 ${RAM_DIR}/client
+
+# WireGuard directory strictly owned by root:root 0700
+mkdir -p ${RAM_DIR}/wireguard
+chown root:root ${RAM_DIR}/wireguard
+chmod 700 ${RAM_DIR}/wireguard
+
+# Copy sealed configs into ephemeral volatile RAM
 cp -f ${DISK_DIR}/key.pem ${RAM_DIR}/key.pem 2>/dev/null || true
 cp -f ${DISK_DIR}/cert.pem ${RAM_DIR}/cert.pem 2>/dev/null || true
 cp -f ${DISK_DIR}/ca.crt ${RAM_DIR}/ca.crt 2>/dev/null || true
 cp -f ${DISK_DIR}/config.json.template ${RAM_DIR}/config.json 2>/dev/null || true
 cp -f ${DISK_DIR}/fortress_config.json ${RAM_DIR}/fortress_config.json 2>/dev/null || true
+cp -f ${DISK_DIR}/wg0.conf ${RAM_DIR}/wireguard/wg0.conf 2>/dev/null || true
+
 if [ -f /home/ubuntu/.google_authenticator ]; then
     head -n 1 /home/ubuntu/.google_authenticator > ${RAM_DIR}/totp_secret
     cp -f ${RAM_DIR}/totp_secret ${DISK_DIR}/totp_secret 2>/dev/null || true
-    chmod 600 ${RAM_DIR}/totp_secret ${DISK_DIR}/totp_secret 2>/dev/null || true
+    chmod 640 ${RAM_DIR}/totp_secret ${DISK_DIR}/totp_secret 2>/dev/null || true
     chown ${FORTRESS_USER}:${FORTRESS_USER} ${RAM_DIR}/totp_secret ${DISK_DIR}/totp_secret 2>/dev/null || true
 fi
-chown -R ${FORTRESS_USER}:${FORTRESS_USER} ${RAM_DIR}
-chmod 700 ${RAM_DIR}
-chmod 600 ${RAM_DIR}/* 2>/dev/null || true
-chmod 644 ${RAM_DIR}/cert.pem ${RAM_DIR}/ca.crt 2>/dev/null || true
+
+chown ${FORTRESS_USER}:${FORTRESS_USER} ${RAM_DIR}/key.pem ${RAM_DIR}/cert.pem ${RAM_DIR}/config.json ${RAM_DIR}/fortress_config.json 2>/dev/null || true
+chmod 600 ${RAM_DIR}/key.pem 2>/dev/null || true
+chmod 644 ${RAM_DIR}/cert.pem ${RAM_DIR}/ca.crt ${RAM_DIR}/config.json 2>/dev/null || true
+chmod 640 ${RAM_DIR}/fortress_config.json 2>/dev/null || true
+
+# WireGuard config in RAM must remain strictly root:root 0600
+chown root:root ${RAM_DIR}/wireguard/wg0.conf
+chmod 600 ${RAM_DIR}/wireguard/wg0.conf
+
+# Ensure persistent wg0.conf is root:root 0600
+chown root:root ${DISK_DIR}/wg0.conf
+chmod 600 ${DISK_DIR}/wg0.conf
+
+# Ensure WireGuard symlink exists
+mkdir -p /etc/wireguard
+ln -sf ${RAM_DIR}/wireguard/wg0.conf /etc/wireguard/wg0.conf
 EOF
 chmod 0755 /usr/local/bin/fortress-init.sh
 
@@ -554,30 +589,16 @@ EOF
 systemctl restart fail2ban || true
 systemctl enable fail2ban || true
 
-# 17. Configure and ACTIVATE Firewall (UFW & iptables)
-echo "[*] Configuring and enforcing UFW firewall rules..."
-sed -i 's/IPV6=yes/IPV6=no/' /etc/default/ufw 2>/dev/null || true
-
-ufw --force reset >/dev/null 2>&1 || true
-ufw default deny incoming >/dev/null 2>&1 || true
-ufw default allow outgoing >/dev/null 2>&1 || true
-ufw allow 22/tcp comment 'SSH 2FA' >/dev/null 2>&1 || true
-ufw allow 443/tcp comment 'VLESS Reality' >/dev/null 2>&1 || true
-ufw allow 8080/tcp comment 'WireGuard over TCP (wstunnel)' >/dev/null 2>&1 || true
-ufw allow 8443/tcp comment 'Dual-Mode Subscription & Web Portal' >/dev/null 2>&1 || true
-ufw allow 8444/tcp comment 'Dedicated HTTPS Web Portal' >/dev/null 2>&1 || true
-ufw allow 8443/udp comment 'Hysteria 2 Standard' >/dev/null 2>&1 || true
-ufw allow 9443/udp comment 'TUIC v5' >/dev/null 2>&1 || true
-ufw allow 9444/udp comment 'Hysteria 2 Salamander' >/dev/null 2>&1 || true
-ufw allow 10443/tcp comment 'Shadowsocks-2022' >/dev/null 2>&1 || true
-ufw allow 10443/udp comment 'Shadowsocks-2022' >/dev/null 2>&1 || true
-ufw allow 51820/udp comment 'Native WireGuard' >/dev/null 2>&1 || true
-ufw --force enable >/dev/null 2>&1 || true
+# 17. Configure Firewall (Direct iptables & Disable Inert UFW)
+echo "[*] Disabling inert UFW and configuring hardened iptables rules..."
+ufw disable >/dev/null 2>&1 || true
+systemctl disable ufw >/dev/null 2>&1 || true
 
 # Direct iptables accept rules (prevents default OCI host-prohibited drops)
 iptables -I INPUT 1 -p tcp -m multiport --dports 22,443,8080,8443,8444,10443 -j ACCEPT 2>/dev/null || true
-iptables -I INPUT 1 -p udp -m multiport --dports 443,8443,9443,9444,10443,51820 -j ACCEPT 2>/dev/null || true
-echo "[+] UFW Firewall and iptables rules ACTIVE and enforcing strict policy."
+iptables -I INPUT 2 -p udp -m multiport --dports 443,8443,9443,9444,10443,51820 -j ACCEPT 2>/dev/null || true
+netfilter-persistent save >/dev/null 2>&1 || true
+echo "[+] Hardened iptables rules ACTIVE and saved with netfilter-persistent."
 
 # 18. Save Master Configuration Output & Client WireGuard Profiles
 cat <<EOF > "$DISK_DIR/fortress_config.json"
@@ -636,10 +657,10 @@ chmod 700 "$DISK_DIR"
 chmod 600 "$DISK_DIR"/*
 chown -R "$FORTRESS_USER:$FORTRESS_USER" "$RAM_DIR"
 
-# 18. Enable and Start Systemd Services
+# 19. Enable and Start Systemd Services
 systemctl daemon-reload
-systemctl enable fortress-init fortress-core fortress-wstunnel fortress-sub
-systemctl restart fortress-init fortress-core fortress-wstunnel fortress-sub
+systemctl enable fortress-init fortress-core fortress-wstunnel fortress-sub wg-quick@wg0
+systemctl restart fortress-init fortress-core fortress-wstunnel fortress-sub wg-quick@wg0
 
 echo "================================================================="
 echo "   SOVEREIGN FORTRESS DEPLOYMENT COMPLETE!                      "

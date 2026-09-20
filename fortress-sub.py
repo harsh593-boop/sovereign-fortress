@@ -50,8 +50,8 @@ CONFIG = {
     "hy2_password": "<YOUR_HYSTERIA2_PASSWORD>",
     "salamander_password": "<YOUR_SALAMANDER_PASSWORD>",
     "ss_password": "<YOUR_SHADOWSOCKS_PASSWORD>",
-    "wg_server_pub": "USNYoSLhsBYTjeIopLNdG1Tt6lyycP+7nGVJgJEa8h8=",
-    "wg_client_priv": "oLT0IlkoTKPAuBm6FLYGCnr5C8sW3Ev2T4S5KGEZ+lA=",
+    "wg_server_pub": "<YOUR_WG_SERVER_PUB>",
+    "wg_client_priv": "<YOUR_WG_CLIENT_PRIV>",
     "wg_client_ip": "10.8.0.2",
     "wstunnel_port": 8080,
     "cert_sha256": "",
@@ -77,8 +77,8 @@ REALITY_SNI = CONFIG.get("reality_sni", "gateway.icloud.com")
 HY2_PASSWORD = CONFIG.get("hy2_password", "<YOUR_HYSTERIA2_PASSWORD>")
 SALAMANDER_PASSWORD = CONFIG.get("salamander_password", "<YOUR_SALAMANDER_PASSWORD>")
 SS_PASSWORD = CONFIG.get("ss_password", "<YOUR_SHADOWSOCKS_PASSWORD>")
-WG_SERVER_PUB = CONFIG.get("wg_server_pub", "USNYoSLhsBYTjeIopLNdG1Tt6lyycP+7nGVJgJEa8h8=")
-WG_CLIENT_PRIV = CONFIG.get("wg_client_priv", "oLT0IlkoTKPAuBm6FLYGCnr5C8sW3Ev2T4S5KGEZ+lA=")
+WG_SERVER_PUB = CONFIG.get("wg_server_pub", "<YOUR_WG_SERVER_PUB>")
+WG_CLIENT_PRIV = CONFIG.get("wg_client_priv", "<YOUR_WG_CLIENT_PRIV>")
 WG_CLIENT_IP = CONFIG.get("wg_client_ip", "10.8.0.2")
 WSTUNNEL_PORT = int(CONFIG.get("wstunnel_port", 8080))
 CERT_SHA256 = CONFIG.get("cert_sha256", "")
@@ -1199,18 +1199,17 @@ class AutoDetectServer(ThreadingMixIn, HTTPServer):
         super().__init__(addr, handler)
         self.ssl_ctx = ssl_ctx
 
-    def get_request(self):
-        sock, addr = self.socket.accept()
+    def finish_request(self, request, client_address):
         if self.ssl_ctx:
             try:
-                sock.settimeout(2.0)
-                first_byte = sock.recv(1, socket.MSG_PEEK)
-                sock.settimeout(None)
+                request.settimeout(2.0)
+                first_byte = request.recv(1, socket.MSG_PEEK)
+                request.settimeout(None)
                 if first_byte == b'\x16':
-                    sock = self.ssl_ctx.wrap_socket(sock, server_side=True)
+                    request = self.ssl_ctx.wrap_socket(request, server_side=True)
             except Exception:
-                pass
-        return sock, addr
+                return
+        super().finish_request(request, client_address)
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
