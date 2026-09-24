@@ -55,7 +55,8 @@ CONFIG = {
     "wg_client_ip": "10.8.0.2",
     "wstunnel_port": 8080,
     "cert_sha256": "",
-    "pin_sha256": ""
+    "pin_sha256": "",
+    "nextdns_id": "<YOUR_NEXTDNS_ID>"
 }
 
 for cp in CONFIG_PATHS:
@@ -640,7 +641,10 @@ def get_singbox_json_config(mode="full"):
                     "172.16.0.0/12",
                     "192.168.0.0/16",
                     "127.0.0.0/8",
-                    "169.254.0.0/16"
+                    "169.254.0.0/16",
+                    "45.90.28.0/24",
+                    "45.90.30.0/24",
+                    f"{SERVER_IP}/32"
                 ],
                 "stack": "system",
                 "sniff": True
@@ -783,6 +787,19 @@ def get_singbox_json_config(mode="full"):
                 ".local",
                 "internal",
                 ".internal"
+            ],
+            "outbound": "direct"
+        },
+        {
+            "domain": [
+                "dns.nextdns.io"
+            ],
+            "domain_suffix": [
+                ".nextdns.io"
+            ],
+            "ip_cidr": [
+                "45.90.28.0/24",
+                "45.90.30.0/24"
             ],
             "outbound": "direct"
         },
