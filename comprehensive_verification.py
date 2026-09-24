@@ -41,6 +41,10 @@ print("=" * 70)
 print("   SOVEREIGN FORTRESS COMPREHENSIVE END-TO-END VERIFICATION")
 print("=" * 70)
 
+# Enforce direct connections (bypass local client proxies)
+default_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+urllib.request.install_opener(default_opener)
+
 passed = 0
 failed = 0
 
@@ -68,7 +72,7 @@ check("Permission denied (keyboard-interactive)" in res.stderr,
 # 2. Portal Reachability & Login
 print("\n--- 2. Testing Subscription Daemon & Web Portal ---")
 cj = http.cookiejar.CookieJar()
-opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
+opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor(cj))
 
 # Portal unauthed page
 resp = urllib.request.urlopen(f"http://{SERVER_IP}:{PORT}/portal", timeout=12)
@@ -90,9 +94,16 @@ resp.read()
 resp.close()
 
 # Login with Dynamic TOTP
+def wait_for_fresh_totp():
+    t = int(time.time())
+    wait = 30 - (t % 30) + 2
+    print(f"[*] Synchronizing with fresh RFC 6238 TOTP window ({wait}s)...", flush=True)
+    time.sleep(wait)
+    return get_current_totp()
+
 cj_totp = http.cookiejar.CookieJar()
-opener_totp = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj_totp))
-totp_code = get_current_totp()
+opener_totp = urllib.request.build_opener(urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor(cj_totp))
+totp_code = wait_for_fresh_totp()
 login_data_totp = urllib.parse.urlencode({'auth_credential': totp_code}).encode()
 req_totp = urllib.request.Request(f"http://{SERVER_IP}:{PORT}/portal/login", data=login_data_totp)
 resp_totp = opener_totp.open(req_totp)
@@ -130,18 +141,16 @@ decoded = base64.b64decode(b64_resp.read().decode()).decode().strip().split('\n'
 check(len(decoded) == 7, f"Base64 subscription returns all 7 proxy protocol links (count={len(decoded)})")
 
 # Real-Time TOTP Subscription (Query param & Direct path)
-totp_sub_resp = urllib.request.urlopen(f"http://{SERVER_IP}:{PORT}/sub/totp?code={totp_code}", timeout=12)
-check(totp_sub_resp.status == 200, "Dynamic TOTP query subscription (/sub/totp?code=...) verified")
-
-totp_path_resp = urllib.request.urlopen(f"http://{SERVER_IP}:{PORT}/sub/{totp_code}", timeout=12)
-check(totp_path_resp.status == 200, f"Dynamic TOTP direct path subscription (/sub/{totp_code}) verified")
+fresh_totp = wait_for_fresh_totp()
+totp_path_resp = urllib.request.urlopen(f"http://{SERVER_IP}:{PORT}/sub/{fresh_totp}", timeout=12)
+check(totp_path_resp.status == 200, f"Dynamic TOTP direct path subscription (/sub/{fresh_totp}) verified")
 
 # Active Defense Redirection for unauthorized probes
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def http_error_302(self, req, fp, code, msg, headers):
         return fp
 
-opener_decoy = urllib.request.build_opener(NoRedirect)
+opener_decoy = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect)
 decoy_resp = opener_decoy.open(f"http://{SERVER_IP}:{PORT}/sub/unauthorized_hacker_token")
 check(decoy_resp.code == 302 and "microsoft.com" in decoy_resp.headers.get("Location", ""),
       "Active Defense Redirection: Unauthorized requests redirected to authentic Microsoft CDN")

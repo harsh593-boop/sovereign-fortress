@@ -53,6 +53,10 @@ print("=" * 75)
 print("   SOVEREIGN FORTRESS: DEEP ADVERSARIAL VERIFICATION SUITE")
 print("=" * 75)
 
+# Enforce direct connections (bypass local client proxies)
+default_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+urllib.request.install_opener(default_opener)
+
 passed = 0
 failed = 0
 
@@ -151,7 +155,7 @@ check(resp_totp_query.status == 200,
 # 4. Web Portal Authentication & Features
 print("\n--- 4. Testing Web Portal Authentication & Features ---", flush=True)
 cj_token = http.cookiejar.CookieJar()
-opener_token = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj_token))
+opener_token = urllib.request.build_opener(urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor(cj_token))
 
 # Login with Token
 login_data = urllib.parse.urlencode({'auth_credential': TOKEN}).encode()
@@ -167,7 +171,7 @@ check("/portal/qrcode.min.js" in portal_html,
 
 # Login with TOTP
 cj_totp = http.cookiejar.CookieJar()
-opener_totp = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj_totp))
+opener_totp = urllib.request.build_opener(urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor(cj_totp))
 portal_totp = wait_for_fresh_totp()
 login_totp_data = urllib.parse.urlencode({'auth_credential': portal_totp}).encode()
 req_totp = urllib.request.Request(f"http://{SERVER_IP}:{PORT}/portal/login", data=login_totp_data)
@@ -177,7 +181,7 @@ check(resp_totp.geturl() == f"http://{SERVER_IP}:{PORT}/portal" and "sf_session"
 
 # Failed login attempt
 cj_bad = http.cookiejar.CookieJar()
-opener_bad = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj_bad))
+opener_bad = urllib.request.build_opener(urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor(cj_bad))
 bad_data = urllib.parse.urlencode({'auth_credential': 'wrong_password_or_code'}).encode()
 req_bad = urllib.request.Request(f"http://{SERVER_IP}:{PORT}/portal/login", data=bad_data)
 try:
@@ -192,7 +196,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
     def http_error_302(self, req, fp, code, msg, headers):
         return fp
 
-opener_decoy = urllib.request.build_opener(NoRedirect)
+opener_decoy = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect)
 
 for probe_url in [
     f"http://{SERVER_IP}:{PORT}/sub/attacker_token_12345",
