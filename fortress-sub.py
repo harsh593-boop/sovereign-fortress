@@ -544,7 +544,6 @@ def get_singbox_json_config(mode="full"):
     ]
     if WG_SERVER_PUB and not WG_SERVER_PUB.startswith("<"):
         outbounds_list.append("Fortress-WireGuard-Native [Direct Kernel Line-Rate]")
-        outbounds_list.append("Fortress-WireGuard-TCP [Captive Portal & Strict TCP]")
 
     nextdns_id = CONFIG.get("nextdns_id", "").strip()
     remote_dns_addr = f"https://dns.nextdns.io/{nextdns_id}" if (nextdns_id and not nextdns_id.startswith("<")) else "https://1.1.1.1/dns-query"
@@ -727,20 +726,32 @@ def get_singbox_json_config(mode="full"):
         cfg["outbounds"].append({
             "type": "wireguard",
             "tag": "Fortress-WireGuard-Native [Direct Kernel Line-Rate]",
-            "server": SERVER_IP,
-            "server_port": 51820,
             "local_address": [f"{WG_CLIENT_IP}/32"],
             "private_key": WG_CLIENT_PRIV,
-            "peer_public_key": WG_SERVER_PUB
+            "peers": [
+                {
+                    "server": SERVER_IP,
+                    "server_port": 51820,
+                    "public_key": WG_SERVER_PUB,
+                    "allowed_ips": ["0.0.0.0/0"]
+                }
+            ],
+            "mtu": 1360
         })
         cfg["outbounds"].append({
             "type": "wireguard",
             "tag": "Fortress-WireGuard-TCP [Captive Portal & Strict TCP]",
-            "server": "127.0.0.1",
-            "server_port": 51820,
             "local_address": [f"{WG_CLIENT_IP}/32"],
             "private_key": WG_CLIENT_PRIV,
-            "peer_public_key": WG_SERVER_PUB
+            "peers": [
+                {
+                    "server": "127.0.0.1",
+                    "server_port": 51820,
+                    "public_key": WG_SERVER_PUB,
+                    "allowed_ips": ["0.0.0.0/0"]
+                }
+            ],
+            "mtu": 1360
         })
 
     cfg["outbounds"].append({
