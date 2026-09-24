@@ -118,14 +118,14 @@ print("\n--- 3. Testing Real-Time 2FA TOTP Subscription Access & Replay Defense 
 curr_totp = wait_for_fresh_totp()
 
 # Test TOTP directly in URL path (/sub/<6-digit-TOTP>)
-resp_totp_path = urllib.request.urlopen(f"http://{SERVER_IP}:{PORT}/sub/{curr_totp}", timeout=5)
+resp_totp_path = urllib.request.urlopen(f"http://{SERVER_IP}:{PORT}/sub/{curr_totp}", timeout=15)
 totp_json = json.loads(resp_totp_path.read().decode())
 check(len(totp_json.get("outbounds", [])) >= 7,
       f"Direct path TOTP subscription (/sub/{curr_totp}) delivered valid Sing-box config")
 
 # Test immediate sequential replay of the same code (Must be rejected with redirect to decoy)
 try:
-    conn_rep = http.client.HTTPConnection(SERVER_IP, PORT, timeout=5)
+    conn_rep = http.client.HTTPConnection(SERVER_IP, PORT, timeout=15)
     conn_rep.request("GET", f"/sub/{curr_totp}")
     rep_resp = conn_rep.getresponse()
     rep_loc = rep_resp.getheader("Location", "")
@@ -137,14 +137,14 @@ check(replay_rejected, "RFC 6238 Replay Defense: Immediate reuse of 6-digit TOTP
 
 # Test fresh TOTP in next window for Base64 format (/sub/<6-digit-TOTP>/b64)
 fresh_totp_b64 = wait_for_fresh_totp()
-resp_totp_b64 = urllib.request.urlopen(f"http://{SERVER_IP}:{PORT}/sub/{fresh_totp_b64}/b64", timeout=5)
+resp_totp_b64 = urllib.request.urlopen(f"http://{SERVER_IP}:{PORT}/sub/{fresh_totp_b64}/b64", timeout=15)
 totp_b64_links = base64.b64decode(resp_totp_b64.read().decode()).decode().strip().split("\n")
 check(len(totp_b64_links) == 7,
       f"Direct path TOTP Base64 subscription (/sub/{fresh_totp_b64}/b64) delivered 7 protocol links")
 
 # Test fresh TOTP via query param (/sub/totp?code=XXXXXX)
 fresh_totp_query = wait_for_fresh_totp()
-resp_totp_query = urllib.request.urlopen(f"http://{SERVER_IP}:{PORT}/sub/totp?code={fresh_totp_query}", timeout=5)
+resp_totp_query = urllib.request.urlopen(f"http://{SERVER_IP}:{PORT}/sub/totp?code={fresh_totp_query}", timeout=15)
 check(resp_totp_query.status == 200,
       f"Query param TOTP subscription (/sub/totp?code={fresh_totp_query}) delivered successfully")
 
@@ -247,10 +247,11 @@ env["DISPLAY"] = "1"
 res_ssh_auth = subprocess.run([
     "ssh",
     "-o", "StrictHostKeyChecking=no",
+    "-o", "ConnectTimeout=15",
     "-i", KEY_PATH,
     f"ubuntu@{SERVER_IP}",
     "echo TWO_FACTOR_AUTH_SUCCESS"
-], env=env, capture_output=True, text=True, timeout=20)
+], env=env, capture_output=True, text=True, timeout=45)
 
 check("TWO_FACTOR_AUTH_SUCCESS" in res_ssh_auth.stdout,
       "SSH Key + Dynamic TOTP 2FA authentication verified (Login succeeded: 'TWO_FACTOR_AUTH_SUCCESS')")

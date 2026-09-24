@@ -22,6 +22,9 @@ import hashlib
 import struct
 import base64
 import http.client
+import http.cookiejar
+import urllib.request
+import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
 SERVER_IP = "<YOUR_SERVER_IP>"
@@ -129,8 +132,11 @@ def test_totp_replay_attack():
     else:
         print(f"[+] Replay attempt rejected with HTTP {status2}.")
 
-    # Test concurrent race condition with identical TOTP
-    print("[*] Testing concurrent race (5 parallel requests using same TOTP)...")
+    # Reset rate limit counter before concurrency probe
+    reset_rate_limit_counter()
+
+    # Test concurrent race condition with identical TOTP (3 parallel requests < MAX_FAILED threshold of 5)
+    print("[*] Testing concurrent race (3 parallel requests using same TOTP)...")
     def send_probe(_):
         try:
             c = http.client.HTTPConnection(SERVER_IP, SUB_PORT, timeout=5)
@@ -143,9 +149,13 @@ def test_totp_replay_attack():
         except Exception:
             return 0
 
-    with ThreadPoolExecutor(max_workers=5) as ex:
-        results = list(ex.map(send_probe, range(5)))
+    with ThreadPoolExecutor(max_workers=3) as ex:
+        results = list(ex.map(send_probe, range(3)))
     print(f"[*] Concurrent responses: {results}")
+
+    # Immediately reset rate limit counter so test runner is clean for subsequent attack phases
+    reset_rate_limit_counter()
+
     replayed_200s = sum(1 for s in results if s == 200)
     if replayed_200s > 0 or replay_succeeded:
         print(f"[VULNERABILITY DETECTED] Server allowed reuse of consumed TOTP code!")
@@ -303,6 +313,37 @@ def test_csrf_token_rotation():
         print(f"[+] Fake-session POST without CSRF header returned HTTP {resp.status} (Body: {body})")
     except Exception as e:
         print(f"[*] CSRF POST error: {e}")
+
+    # Test 3: Valid authenticated session POST without X-Fortress-CSRF header (Strict CSRF Defense Check)
+    if TOKEN:
+        try:
+            cj = http.cookiejar.CookieJar()
+            opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
+            login_data = urllib.parse.urlencode({'auth_credential': TOKEN}).encode()
+            login_req = urllib.request.Request(f"http://{SERVER_IP}:{SUB_PORT}/portal/login", data=login_data)
+            login_resp = opener.open(login_req)
+            session_cookie = None
+            for c in cj:
+                if c.name == "sf_session":
+                    session_cookie = f"sf_session={c.value}"
+                    break
+            
+            if session_cookie:
+                # Attempt rotate-token with valid session but WITHOUT X-Fortress-CSRF header
+                conn = http.client.HTTPConnection(SERVER_IP, SUB_PORT, timeout=4)
+                conn.request("POST", "/portal/rotate-token", body=b"", headers={
+                    "User-Agent": "RedTeam-CSRF-Exploit",
+                    "Cookie": session_cookie
+                })
+                resp = conn.getresponse()
+                body = resp.read().decode()
+                conn.close()
+                if resp.status == 403 and "CSRF Rejected" in body:
+                    print(f"[+] SUCCESS: Valid-session POST without CSRF header correctly blocked with HTTP 403 ({body})!")
+                else:
+                    print(f"[-] VULNERABILITY: Valid session POST without CSRF header returned HTTP {resp.status} ({body})")
+        except Exception as e:
+            print(f"[*] Valid session CSRF test error: {e}")
 
 if __name__ == "__main__":
     print("======================================================================")

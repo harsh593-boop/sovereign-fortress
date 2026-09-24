@@ -1202,13 +1202,16 @@ class AutoDetectServer(ThreadingMixIn, HTTPServer):
     def finish_request(self, request, client_address):
         if self.ssl_ctx:
             try:
-                request.settimeout(2.0)
+                request.settimeout(1.0)
                 first_byte = request.recv(1, socket.MSG_PEEK)
                 request.settimeout(None)
                 if first_byte == b'\x16':
                     request = self.ssl_ctx.wrap_socket(request, server_side=True)
             except Exception:
-                return
+                try:
+                    request.settimeout(None)
+                except Exception:
+                    pass
         super().finish_request(request, client_address)
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
