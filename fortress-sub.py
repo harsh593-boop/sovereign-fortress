@@ -196,22 +196,78 @@ DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
             </div>
         </header>
 
-        <div class="hero">
+        <!-- TWO PROFILES SELECTION SECTION -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-bottom: 24px;">
+            <!-- MODE 1: FULL TUNNEL -->
+            <div style="background: linear-gradient(145deg, #132742, #0d1a2d); border: 1px solid rgba(56,189,248,0.4); border-radius: 16px; padding: 22px; display: flex; flex-direction: column; justify-content: space-between;">
+                <div>
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                        <span style="font-size: 13px; font-weight: 800; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.5px;">🛡️ Profile 1: Full Tunnel</span>
+                        <span style="background: rgba(56,189,248,0.15); color: #38bdf8; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px;">Zero-Log VPS DNS</span>
+                    </div>
+                    <h3 style="font-size: 17px; font-weight: 700; color: #fff; margin-bottom: 6px;">Full Tunnel (Sovereign DNS)</h3>
+                    <p style="color: #94a3b8; font-size: 12px; line-height: 1.5; margin-bottom: 12px;">
+                        100% of IP traffic and DNS is encrypted to Mumbai. Resolves recursively via the VPS Unbound resolver (<code>127.0.0.1:5335</code>) with DNSSEC validation. <strong>Zero 3rd-party logs, no NextDNS</strong>. Best for Android/iOS & non-YogaDNS PCs.
+                    </p>
+                    <div class="url-box" style="margin-bottom: 14px;">
+                        <code>{{SUB_FULL_URL}}</code>
+                    </div>
+                </div>
+                <div>
+                    <div class="btn-row">
+                        <a href="{{HIDDIFY_FULL}}" class="btn btn-primary">⚡ 1-Click Hiddify</a>
+                        <button class="btn btn-sec" onclick="copyText('{{SUB_FULL_URL}}', 'Full Tunnel URL copied!')">📋 Copy URL</button>
+                        <button class="btn btn-sec" onclick="setQR('full')">📱 View QR</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MODE 2: TRAFFIC-ONLY -->
+            <div style="background: linear-gradient(145deg, #1e1b38, #121024); border: 1px solid rgba(168,85,247,0.4); border-radius: 16px; padding: 22px; display: flex; flex-direction: column; justify-content: space-between;">
+                <div>
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                        <span style="font-size: 13px; font-weight: 800; color: #c084fc; text-transform: uppercase; letter-spacing: 0.5px;">⚡ Profile 2: Traffic-Only</span>
+                        <span style="background: rgba(168,85,247,0.15); color: #c084fc; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px;">YogaDNS Compatible</span>
+                    </div>
+                    <h3 style="font-size: 17px; font-weight: 700; color: #fff; margin-bottom: 6px;">Traffic-Only (YogaDNS + NextDNS <YOUR_NEXTDNS_ID>)</h3>
+                    <p style="color: #94a3b8; font-size: 12px; line-height: 1.5; margin-bottom: 12px;">
+                        Web/TCP/UDP traffic is tunneled. <strong>DNS is routed directly</strong> (ports 53 & 853 direct, NextDNS IPs <code>45.90.28.0/24</code> direct). <strong>Zero WFP conflicts with YogaDNS</strong> on Windows!
+                    </p>
+                    <div class="url-box" style="margin-bottom: 14px;">
+                        <code>{{SUB_TRAFFIC_URL}}</code>
+                    </div>
+                </div>
+                <div>
+                    <div class="btn-row">
+                        <a href="{{HIDDIFY_TRAFFIC}}" class="btn" style="background: linear-gradient(135deg, #9333ea, #c084fc); color: #040914;">⚡ 1-Click Hiddify</a>
+                        <button class="btn btn-sec" onclick="copyText('{{SUB_TRAFFIC_URL}}', 'Traffic-Only URL copied!')">📋 Copy URL</button>
+                        <button class="btn btn-sec" onclick="setQR('traffic')">📱 View QR</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- INTERACTIVE QR DISPLAY PANEL -->
+        <div class="hero" id="qr-panel">
             <div class="qr-wrap">
                 <div id="sub-qr"></div>
             </div>
             <div>
-                <h2>Universal Hiddify QR / Subscription</h2>
-                <p style="color:#94a3b8; font-size:13px; margin-top:4px;">
+                <div style="display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap;">
+                    <button id="tab-full" class="btn btn-primary" onclick="setQR('full')">🛡️ Full Tunnel QR</button>
+                    <button id="tab-traffic" class="btn btn-sec" onclick="setQR('traffic')">⚡ Traffic-Only QR</button>
+                </div>
+                <h2 id="qr-title">Universal Full Tunnel Subscription QR</h2>
+                <p id="qr-desc" style="color:#94a3b8; font-size:13px; margin-top:4px;">
                     Scan with <strong>Hiddify App</strong> on Android / iOS / Windows. Includes automatic 
                     <strong>Campus Intranet Split-Routing</strong> (*.campus.internal & 10.0.0.0/8 bypass directly).
                 </p>
                 <div class="url-box">
-                    <code>{{SUB_URL}}</code>
+                    <code id="qr-url-text">{{SUB_FULL_URL}}</code>
                 </div>
                 <div class="btn-row">
-                    <button class="btn btn-primary" onclick="copyText('{{SUB_URL}}', 'Subscription URL copied!')">📋 Copy URL</button>
-                    <a href="{{HIDDIFY_PRIMARY}}" class="btn btn-sec">⚡ 1-Click Hiddify</a>
+                    <button class="btn btn-primary" id="qr-copy-btn" onclick="copyCurrentQRUrl()">📋 Copy URL</button>
+                    <a id="qr-hiddify-btn" href="{{HIDDIFY_FULL}}" class="btn btn-sec">⚡ 1-Click Hiddify</a>
                     <button class="btn btn-sec" onclick="copyText('{{SUB_B64_URL}}', 'Base64 Link copied!')">🔗 Base64 URL</button>
                     <button class="btn btn-danger" onclick="rotateToken()">🔄 Rotate Token</button>
                 </div>
@@ -302,13 +358,45 @@ DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="toast" id="toast"></div>
 
     <script>
+        var fullSubUrl = "{{SUB_FULL_URL}}";
+        var trafficSubUrl = "{{SUB_TRAFFIC_URL}}";
+        var fullHiddify = "{{HIDDIFY_FULL}}";
+        var trafficHiddify = "{{HIDDIFY_TRAFFIC}}";
+        var currentMode = 'full';
+        var qrcodeObj = null;
+
+        function setQR(mode) {
+            currentMode = mode;
+            var isFull = (mode === 'full');
+            document.getElementById('tab-full').className = isFull ? 'btn btn-primary' : 'btn btn-sec';
+            document.getElementById('tab-traffic').className = isFull ? 'btn btn-sec' : 'btn btn-primary';
+            document.getElementById('qr-title').innerText = isFull ? 'Universal Full Tunnel Subscription QR' : 'Universal Traffic-Only Subscription QR';
+            document.getElementById('qr-desc').innerText = isFull ? 'Encrypted VPS-Hosted Unbound DNS (Zero Logs) + Full IP Proxy.' : 'Direct DNS Bypass for YogaDNS & NextDNS (<YOUR_NEXTDNS_ID>) + Web Proxy.';
+            var targetUrl = isFull ? fullSubUrl : trafficSubUrl;
+            document.getElementById('qr-url-text').innerText = targetUrl;
+            document.getElementById('qr-hiddify-btn').href = isFull ? fullHiddify : trafficHiddify;
+            if (qrcodeObj) {
+                qrcodeObj.clear();
+                qrcodeObj.makeCode(targetUrl);
+            }
+            var panel = document.getElementById('qr-panel');
+            if (panel) {
+                panel.scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+
+        function copyCurrentQRUrl() {
+            var target = (currentMode === 'full') ? fullSubUrl : trafficSubUrl;
+            copyText(target, (currentMode === 'full' ? 'Full Tunnel' : 'Traffic-Only') + ' Subscription URL copied!');
+        }
+
         function initQRs() {
             if (typeof QRCode === "undefined") {
                 setTimeout(initQRs, 200);
                 return;
             }
-            new QRCode(document.getElementById("sub-qr"), {
-                text: "{{SUB_URL}}",
+            qrcodeObj = new QRCode(document.getElementById("sub-qr"), {
+                text: fullSubUrl,
                 width: 186,
                 height: 186,
                 colorDark: "#000000",
@@ -594,8 +682,12 @@ def get_singbox_json_config(mode="full"):
                 },
                 {
                     "tag": "dns-remote",
-                    "address": remote_dns_addr,
-                    "address_resolver": "dns-direct",
+                    "address": "tcp://127.0.0.1:5335",
+                    "detour": "proxy"
+                },
+                {
+                    "tag": "dns-remote-wg",
+                    "address": "udp://10.8.0.1:5335",
                     "detour": "proxy"
                 }
             ],
@@ -622,6 +714,20 @@ def get_singbox_json_config(mode="full"):
             "strategy": "prefer_ipv4"
         }
 
+    tun_exclude = [
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "127.0.0.0/8",
+        "169.254.0.0/16",
+        f"{SERVER_IP}/32"
+    ]
+    if is_traffic_only:
+        tun_exclude.extend([
+            "45.90.28.0/24",
+            "45.90.30.0/24"
+        ])
+
     cfg = {
         "log": {
             "level": "warn"
@@ -636,16 +742,7 @@ def get_singbox_json_config(mode="full"):
                 ],
                 "auto_route": True,
                 "strict_route": False,
-                "route_exclude_address": [
-                    "10.0.0.0/8",
-                    "172.16.0.0/12",
-                    "192.168.0.0/16",
-                    "127.0.0.0/8",
-                    "169.254.0.0/16",
-                    "45.90.28.0/24",
-                    "45.90.30.0/24",
-                    f"{SERVER_IP}/32"
-                ],
+                "route_exclude_address": tun_exclude,
                 "stack": "system",
                 "sniff": True
             }
@@ -789,8 +886,11 @@ def get_singbox_json_config(mode="full"):
                 ".internal"
             ],
             "outbound": "direct"
-        },
-        {
+        }
+    ])
+
+    if is_traffic_only:
+        rules.append({
             "domain": [
                 "dns.nextdns.io"
             ],
@@ -802,7 +902,9 @@ def get_singbox_json_config(mode="full"):
                 "45.90.30.0/24"
             ],
             "outbound": "direct"
-        },
+        })
+
+    rules.extend([
         {
             "ip_cidr": [
                 f"{SERVER_IP}/32",
@@ -861,15 +963,21 @@ def render_login_page(error_msg=None):
     return LOGIN_HTML_TEMPLATE.replace("{{ERR_HTML}}", err_html)
 
 def render_dashboard_page(token, totp_secret):
-    sub_url = f"http://{SERVER_IP}:{PORT}/sub/{token}"
+    sub_full_url = f"http://{SERVER_IP}:{PORT}/sub/{token}?mode=full"
+    sub_traffic_url = f"http://{SERVER_IP}:{PORT}/sub/{token}?mode=traffic-only"
     sub_b64_url = f"http://{SERVER_IP}:{PORT}/sub/{token}/b64"
-    hiddify_primary = f"hiddify://import/{sub_url}#SovereignFortress"
+    hiddify_full = f"hiddify://import/{sub_full_url}#Sovereign%20Fortress%20(Full%20Tunnel)"
+    hiddify_traffic = f"hiddify://import/{sub_traffic_url}#Sovereign%20Fortress%20(Traffic-Only)"
     vless, hy2_sal, hy2_std, tuic, ss, wg_native, wg_tcp = get_protocol_links()
 
     html = DASHBOARD_HTML_TEMPLATE
-    html = html.replace("{{SUB_URL}}", sub_url)
+    html = html.replace("{{SUB_FULL_URL}}", sub_full_url)
+    html = html.replace("{{SUB_TRAFFIC_URL}}", sub_traffic_url)
+    html = html.replace("{{SUB_URL}}", sub_full_url)
     html = html.replace("{{SUB_B64_URL}}", sub_b64_url)
-    html = html.replace("{{HIDDIFY_PRIMARY}}", hiddify_primary)
+    html = html.replace("{{HIDDIFY_FULL}}", hiddify_full)
+    html = html.replace("{{HIDDIFY_TRAFFIC}}", hiddify_traffic)
+    html = html.replace("{{HIDDIFY_PRIMARY}}", hiddify_full)
     html = html.replace("{{TOTP_SECRET}}", totp_secret or "Configuring...")
     html = html.replace("{{VLESS}}", vless)
     html = html.replace("{{HY2_SAL}}", hy2_sal)
@@ -1052,7 +1160,7 @@ class FortressSubHandler(BaseHTTPRequestHandler):
                 return
 
             if fmt in ["wg", "wireguard"]:
-                wg_conf = f"[Interface]\nPrivateKey = {WG_CLIENT_PRIV}\nAddress = {WG_CLIENT_IP}/24\nDNS = 1.1.1.1, 8.8.8.8\nMTU = 1360\n\n[Peer]\nPublicKey = {WG_SERVER_PUB}\nEndpoint = {SERVER_IP}:51820\nAllowedIPs = 0.0.0.0/0, ::/0\nPersistentKeepalive = 15\n"
+                wg_conf = f"[Interface]\nPrivateKey = {WG_CLIENT_PRIV}\nAddress = {WG_CLIENT_IP}/24\nDNS = 10.8.0.1\nMTU = 1360\n\n[Peer]\nPublicKey = {WG_SERVER_PUB}\nEndpoint = {SERVER_IP}:51820\nAllowedIPs = 0.0.0.0/0, ::/0\nPersistentKeepalive = 15\n"
                 body = wg_conf.encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "text/plain; charset=utf-8")
@@ -1068,7 +1176,7 @@ class FortressSubHandler(BaseHTTPRequestHandler):
                 return
 
             if fmt in ["wg-tcp", "wireguard-tcp"]:
-                wg_tcp_conf = f"[Interface]\nPrivateKey = {WG_CLIENT_PRIV}\nAddress = {WG_CLIENT_IP}/24\nDNS = 1.1.1.1, 8.8.8.8\nMTU = 1360\n\n[Peer]\nPublicKey = {WG_SERVER_PUB}\nEndpoint = 127.0.0.1:51820\nAllowedIPs = 0.0.0.0/0, ::/0\nPersistentKeepalive = 15\n"
+                wg_tcp_conf = f"[Interface]\nPrivateKey = {WG_CLIENT_PRIV}\nAddress = {WG_CLIENT_IP}/24\nDNS = 10.8.0.1\nMTU = 1360\n\n[Peer]\nPublicKey = {WG_SERVER_PUB}\nEndpoint = 127.0.0.1:51820\nAllowedIPs = 0.0.0.0/0, ::/0\nPersistentKeepalive = 15\n"
                 body = wg_tcp_conf.encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "text/plain; charset=utf-8")
@@ -1086,7 +1194,8 @@ class FortressSubHandler(BaseHTTPRequestHandler):
             # Default: Full Sing-box 1.11+ JSON
             config_obj = get_singbox_json_config(mode=mode)
             body = json.dumps(config_obj, indent=2).encode("utf-8")
-            profile_title = "Sovereign Fortress (Traffic-Only)" if (mode.lower() in ["traffic-only", "split", "direct-dns", "yogadns"]) else "Sovereign Fortress"
+            is_traffic_mode = (mode.lower() in ["traffic-only", "split", "direct-dns", "yogadns"])
+            profile_title = "Sovereign Fortress (Traffic-Only - YogaDNS)" if is_traffic_mode else "Sovereign Fortress (Full Tunnel - Zero-Log DNS)"
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
