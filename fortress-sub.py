@@ -535,15 +535,16 @@ def get_singbox_json_config(mode="full"):
         if ca_pem:
             break
 
-    outbounds_list = [
+    stealth_outbounds = [
         "Fortress-Reality-TCP [DPI & Campus Firewall Slayer]",
         "Fortress-Hysteria2-Salamander [Scrambled QUIC Anti-Throttling]",
         "Fortress-Hysteria2-Standard [Brutal BBR Maximum 4K]",
         "Fortress-TUIC5 [0-RTT Fast Mobile Roaming]",
         "Fortress-Shadowsocks2022 [Ultra-Low Battery AEAD]"
     ]
+    all_outbounds = list(stealth_outbounds)
     if WG_SERVER_PUB and not WG_SERVER_PUB.startswith("<"):
-        outbounds_list.append("Fortress-WireGuard-Native [Direct Kernel Line-Rate]")
+        all_outbounds.append("Fortress-WireGuard-Native [Direct Kernel Line-Rate]")
 
     nextdns_id = CONFIG.get("nextdns_id", "").strip()
     remote_dns_addr = f"https://dns.nextdns.io/{nextdns_id}" if (nextdns_id and not nextdns_id.startswith("<")) else "https://1.1.1.1/dns-query"
@@ -649,13 +650,13 @@ def get_singbox_json_config(mode="full"):
             {
                 "type": "selector",
                 "tag": "proxy",
-                "outbounds": ["auto-fastest"] + outbounds_list,
+                "outbounds": ["auto-fastest"] + all_outbounds,
                 "default": "auto-fastest"
             },
             {
                 "type": "urltest",
                 "tag": "auto-fastest",
-                "outbounds": outbounds_list,
+                "outbounds": stealth_outbounds,
                 "url": "https://www.google.com/generate_204",
                 "interval": "3m",
                 "tolerance": 50
@@ -787,6 +788,7 @@ def get_singbox_json_config(mode="full"):
         },
         {
             "ip_cidr": [
+                f"{SERVER_IP}/32",
                 "10.0.0.0/8",
                 "172.16.0.0/12",
                 "192.168.0.0/16"
