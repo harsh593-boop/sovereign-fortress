@@ -101,7 +101,7 @@ WST_URL="https://github.com/erebe/wstunnel/releases/download/v${WSTUNNEL_VER}/${
 
 case "$WST_ARCH" in
     amd64) EXPECTED_WST_SHA256="822e1a2f64606ddc9e782987114620577fc75e5f0e34a66a1ec13459c55b6c38" ;;
-    arm64) EXPECTED_WST_SHA256="" ;;
+    arm64) EXPECTED_WST_SHA256="99f9506d01d1b4073254609600ec5056dab8dc58aec75c32f6eb0508335a8fd2" ;;
 esac
 
 curl -sSL "$WST_URL" -o "/tmp/${WST_TAR}"
@@ -141,19 +141,62 @@ WG_CLIENT_PRIV=$(wg genkey)
 WG_CLIENT_PUB=$(echo "$WG_CLIENT_PRIV" | wg pubkey)
 
 # 7. Dedicated Private CA & Authenticated TLS Certificate
-echo "[*] Generating Dedicated Sovereign Private CA & Certificate..."
-openssl req -x509 -newkey rsa:4096 -days 365 -nodes \
-    -keyout "$DISK_DIR/ca.key" -out "$DISK_DIR/ca.crt" \
-    -subj "/CN=Sovereign Fortress Root CA" >/dev/null 2>&1
+echo "[*] Generating Dedicated Sovereign Private CA & SAN-enabled Certificate..."
+cat << 'EOFCACNF' > /tmp/ca_openssl.cnf
+[ req ]
+distinguished_name = req_distinguished_name
+x509_extensions = v3_ca
+prompt = no
 
-openssl req -newkey rsa:2048 -nodes \
-    -keyout "$DISK_DIR/key.pem" -out "$DISK_DIR/cert.csr" \
-    -subj "/CN=www.microsoft.com" >/dev/null 2>&1
+[ req_distinguished_name ]
+CN = Sovereign Fortress Root CA
+O = Sovereign Fortress
+C = IN
+
+[ v3_ca ]
+basicConstraints = critical, CA:TRUE
+keyUsage = critical, digitalSignature, cRLSign, keyCertSign
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer
+EOFCACNF
+
+openssl req -x509 -new -nodes -newkey rsa:4096 -days 3650 \
+    -config /tmp/ca_openssl.cnf \
+    -keyout "$DISK_DIR/ca.key" \
+    -out "$DISK_DIR/ca.crt"
+
+cat << EOFSRVCNF > /tmp/server_openssl.cnf
+[ req ]
+distinguished_name = req_distinguished_name
+req_extensions = v3_req
+prompt = no
+
+[ req_distinguished_name ]
+CN = www.microsoft.com
+O = Sovereign Fortress
+C = IN
+
+[ v3_req ]
+basicConstraints = CA:FALSE
+keyUsage = digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = @alt_names
+
+[ alt_names ]
+DNS.1 = www.microsoft.com
+IP.1 = ${SERVER_IP}
+EOFSRVCNF
+
+openssl req -new -nodes -newkey rsa:2048 \
+    -config /tmp/server_openssl.cnf \
+    -keyout "$DISK_DIR/key.pem" \
+    -out "$DISK_DIR/cert.csr"
 
 openssl x509 -req -in "$DISK_DIR/cert.csr" \
     -CA "$DISK_DIR/ca.crt" -CAkey "$DISK_DIR/ca.key" -CAcreateserial \
-    -out "$DISK_DIR/cert.pem" -days 365 >/dev/null 2>&1
-rm -f "$DISK_DIR/cert.csr"
+    -extfile /tmp/server_openssl.cnf -extensions v3_req \
+    -days 825 -out "$DISK_DIR/cert.pem"
+rm -f "$DISK_DIR/cert.csr" /tmp/ca_openssl.cnf /tmp/server_openssl.cnf
 
 cp "$DISK_DIR/key.pem" "$RAM_DIR/key.pem"
 cp "$DISK_DIR/cert.pem" "$RAM_DIR/cert.pem"
@@ -478,10 +521,10 @@ set -euo pipefail
 # Ensure tmpfs mount on ${RAM_DIR}
 if ! mountpoint -q ${RAM_DIR}; then
     mkdir -p ${RAM_DIR}
-    mount -t tmpfs -o size=256M,mode=0700 tmpfs ${RAM_DIR}
+    mount -t tmpfs -o size=256M,mode=0755 tmpfs ${RAM_DIR}
 fi
 
-chmod 700 ${RAM_DIR}
+chmod 755 ${RAM_DIR}
 chown ${FORTRESS_USER}:${FORTRESS_USER} ${RAM_DIR}
 
 mkdir -p ${RAM_DIR}/client
@@ -595,7 +638,7 @@ ufw disable >/dev/null 2>&1 || true
 systemctl disable ufw >/dev/null 2>&1 || true
 
 # Direct iptables accept rules (prevents default OCI host-prohibited drops)
-iptables -I INPUT 1 -p tcp -m multiport --dports 22,443,8080,8443,8444,10443 -j ACCEPT 2>/dev/null || true
+iptables -I INPUT 1 -p tcp -m multiport --dports 22,443,8080,8443,10443 -j ACCEPT 2>/dev/null || true
 iptables -I INPUT 2 -p udp -m multiport --dports 443,8443,9443,9444,10443,51820 -j ACCEPT 2>/dev/null || true
 netfilter-persistent save >/dev/null 2>&1 || true
 echo "[+] Hardened iptables rules ACTIVE and saved with netfilter-persistent."
@@ -673,10 +716,9 @@ echo "[+] TUIC v5:            UDP 9443 (0-RTT Native QUIC)"
 echo "[+] Shadowsocks:        TCP/UDP 10443 (2022-blake3-aes-256-gcm)"
 echo "[+] Native WireGuard:   UDP 51820 (Kernel Line-Rate)"
 echo "[+] WireGuard-over-TCP: TCP 8080 (wstunnel TLS 1.3)"
-echo "[+] Universal Sub (HTTP): http://${SERVER_IP}:8443/sub/${SUB_TOKEN}"
-echo "[+] Traffic-Only Sub:    http://${SERVER_IP}:8443/sub/${SUB_TOKEN}?mode=traffic-only"
-echo "[+] Web Portal (HTTP):   http://${SERVER_IP}:8443/portal"
-echo "[+] Web Portal (HTTPS):  https://${SERVER_IP}:8444/portal"
+echo "[+] Universal Sub (HTTPS): https://${SERVER_IP}:8443/sub/${SUB_TOKEN}"
+echo "[+] Traffic-Only Sub:     https://${SERVER_IP}:8443/sub/${SUB_TOKEN}?mode=traffic-only"
+echo "[+] Web Portal (HTTPS):   https://${SERVER_IP}:8443/portal"
 echo "[+] Recursive DNS:      127.0.0.1:5335 (Unbound Zero-Log Root Hints)"
 echo "[+] Master Token:       ${SUB_TOKEN}"
 echo "[+] Sandboxing:         Dedicated unprivileged user 'fortress' + Systemd Strict"

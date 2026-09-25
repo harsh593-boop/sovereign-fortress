@@ -44,11 +44,10 @@ if os.path.exists(CONFIG_FILE):
 SERVER_IP = CONFIG.get("server_ip", "<YOUR_SERVER_IP>")
 SUB_PORT = CONFIG.get("sub_port", 8443)
 TOKEN = CONFIG.get("token", "<YOUR_SUBSCRIPTION_TOKEN>")
-SUB_URL = f"http://{SERVER_IP}:{SUB_PORT}/sub/{TOKEN}"
-SUB_URL_TRAFFIC_ONLY = f"http://{SERVER_IP}:{SUB_PORT}/sub/{TOKEN}?mode=traffic-only"
+SUB_URL = f"https://{SERVER_IP}:{SUB_PORT}/sub/{TOKEN}"
+SUB_URL_TRAFFIC_ONLY = f"https://{SERVER_IP}:{SUB_PORT}/sub/{TOKEN}?mode=traffic-only"
 HIDDIFY_DEEPLINK = f"hiddify://import/{SUB_URL}#SovereignFortress"
-PORTAL_URL = f"http://{SERVER_IP}:{SUB_PORT}/portal"
-PORTAL_HTTPS_URL = f"https://{SERVER_IP}:8444/portal"
+PORTAL_URL = f"https://{SERVER_IP}:{SUB_PORT}/portal"
 
 UUID = CONFIG.get("uuid", "<YOUR_UUID>")
 REALITY_PUBKEY = CONFIG.get("reality_pubkey", "<YOUR_REALITY_PUBLIC_KEY>")
@@ -86,7 +85,7 @@ PROTOCOLS = [
         "port_num": 9444,
         "badge": "Scrambled QUIC Anti-Throttling",
         "desc": "[Scrambled QUIC - Anti-Throttling] — ChaCha20 XOR packet header scrambler. Use when campus firewall throttles or drops standard QUIC/UDP.",
-        "link": f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:9444?insecure=1&sni=www.microsoft.com&alpn=h3&obfs=salamander&obfs-password={SALAMANDER_PASS}{pin_param}#Fortress-Hysteria2-Salamander"
+        "link": f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:9444?sni=www.microsoft.com&alpn=h3&obfs=salamander&obfs-password={SALAMANDER_PASS}{pin_param}#Fortress-Hysteria2-Salamander"
     },
     {
         "name": "Fortress-Hysteria2-Standard",
@@ -95,7 +94,7 @@ PROTOCOLS = [
         "port_num": 8443,
         "badge": "Brutal BBR Maximum Speed 4K",
         "desc": "[Brutal BBR - Maximum Speed 4K] — Aggressive congestion control designed for lossy campus Wi-Fi. Delivers gigabit throughput for video and downloads.",
-        "link": f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:8443?insecure=1&sni=www.microsoft.com&alpn=h3{pin_param}#Fortress-Hysteria2-Standard"
+        "link": f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:8443?sni=www.microsoft.com&alpn=h3{pin_param}#Fortress-Hysteria2-Standard"
     },
     {
         "name": "Fortress-TUIC5",
@@ -104,7 +103,7 @@ PROTOCOLS = [
         "port_num": 9443,
         "badge": "0-RTT Fast Mobile Roaming",
         "desc": "[0-RTT Fast Mobile Roaming] — Zero handshake latency when switching between campus Wi-Fi APs or mobile data on Android.",
-        "link": f"tuic://{UUID}:{HY2_PASSWORD}@{SERVER_IP}:9443?congestion_control=bbr&alpn=h3&sni=www.microsoft.com&allow_insecure=1&insecure=1{pin_param}#Fortress-TUIC5-UDP"
+        "link": f"tuic://{UUID}:{HY2_PASSWORD}@{SERVER_IP}:9443?congestion_control=bbr&alpn=h3&sni=www.microsoft.com{pin_param}#Fortress-TUIC5-UDP"
     },
     {
         "name": "Fortress-Shadowsocks2022",

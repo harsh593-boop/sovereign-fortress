@@ -74,3 +74,5 @@ update_remote_sub.py
 verify_ssh_2fa_enforcement.py
 SovereignFortress.bat
 LaunchSovereignApp.bat
+known_hosts
+collect_server_forensics.py

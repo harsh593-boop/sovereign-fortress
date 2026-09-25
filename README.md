@@ -149,7 +149,7 @@ sudo bash deploy_server.sh
 ```
 
 The automated installer will:
-1. Create dedicated unprivileged system user `fortress` with Linux routing capabilities (`CAP_NET_ADMIN`).
+1. Create dedicated unprivileged system user `fortress` with minimal network binding capability (`CAP_NET_BIND_SERVICE`) and strict systemd sandboxing.
 2. Mount a 256 MB volatile RAM disk (`tmpfs`) at `/run/fortress` for zero disk logs.
 3. Install Sing-box 1.11.4 Core and WSTunnel with SHA-256 cryptographic verification.
 4. Configure Unbound recursive zero-log DNS resolver on `127.0.0.1:5335`.
@@ -213,9 +213,9 @@ Sovereign Fortress implements a four-tier defense-in-depth cryptographic storage
 * **Zero Forensic Disk Logging**: Systemd journal buffers for Sovereign Fortress services run with `Storage=volatile`, and sing-box logging is constrained to `warn`. No plaintext connection history, DNS queries, client IPs, or destination metrics are ever committed to non-volatile disk storage.
 * **Instant Cryptographic Zeroization on Power Loss**: RAM cells require continuous electric refresh. The instant the server instance is rebooted, terminated, or loses power, all volatile RAM charges dissipate in sub-seconds, physically and irrevocably obliterating all cryptographic session keys and access tokens.
 
-### 3. Client-Side Hardware Vault & DPAPI/TPM Sealing
-* **Windows DPAPI (`Protect-FortressVault.ps1`)**: On the local client machine, all connection profiles, subscription links, and TOTP secrets are encrypted using Windows Cryptographic Data Protection API (`CryptProtectData`).
-* **Hardware TPM Binding**: Vault ciphertexts are cryptographically tied to the authenticated user's hardware TPM (Trusted Platform Module) and login credentials. Offline drive cloning, rogue processes without user context, or physical storage theft cannot recover the credentials without an active user Windows session.
+### 3. Client-Side Cryptographic Vault & Windows DPAPI
+* **Windows DPAPI (`Protect-FortressVault.ps1`)**: On the local client machine, all connection profiles, subscription links, and TOTP secrets are encrypted using Windows Cryptographic Data Protection API (`CryptProtectData` with `DataProtectionScope.CurrentUser`).
+* **Machine & User Session Entropy**: Vault ciphertexts are cryptographically bound using secondary entropy derived from user identity, computer name, and static salt. Offline drive cloning, cold disk extraction, or rogue processes in other user sessions cannot decrypt the credentials without access to the authenticated user's Windows session. (Note: As standard with user-scoped DPAPI, processes executing within the active user logon session can unprotect vault data; it is not hardware PCR-sealed to a TPM).
 
 ### 4. Emergency Anti-Forensic Panic Switch (`Shred-Fortress.ps1`)
 * **Multi-Pass DOD 5220.22-M Overwrite**: In extreme threat environments, running `Shred-Fortress.ps1` executes pseudo-random cryptographic bit overwrites across all sensitive client files before physical file unlinking, preventing SSD/HDD forensic file carving.

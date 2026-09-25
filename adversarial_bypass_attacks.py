@@ -1,12 +1,12 @@
 """
-Adversarial Bypass Attack Suite (Fresh Red-Team Pass)
+Adversarial Bypass Attack Suite (Strict Security Verification)
 Sovereign Fortress - Zero-Trust Security Verification
 
 This suite actively tests for vulnerabilities, bypasses, and regression flaws:
 1. RFC 6238 TOTP Replay & Concurrent Race Attack
 2. Rate-Limiting Header Spoofing (X-Forwarded-For, X-Real-IP, Client-IP)
 3. Path Normalization, Traversal & HTTP Method Tampering
-4. Real Cryptographic Protocol Handshakes (Reality TLS 1.3 ClientHello, WSTunnel WS Upgrade)
+4. Real Cryptographic Protocol Handshakes (Reality TLS 1.3 ClientHello, WSTunnel WS Upgrade with Root CA)
 5. CSRF State-Change Vulnerability on Session Operations
 6. Client-Side Probing Integrity (UDP Facade vs Real Round-Trip)
 """
@@ -27,13 +27,10 @@ import urllib.request
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
-SERVER_IP = "<YOUR_SERVER_IP>"
-SUB_PORT = 8443
-WSTUNNEL_PORT = 8080
-REALITY_PORT = 443
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), "fortress_config.json")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_PATH = os.path.join(BASE_DIR, "fortress_config.json")
+CA_PATH = os.path.join(BASE_DIR, "ca.crt")
 
-# Load configuration if available
 CONFIG = {}
 if os.path.exists(CONFIG_PATH):
     try:
@@ -42,9 +39,18 @@ if os.path.exists(CONFIG_PATH):
     except Exception:
         pass
 
-SERVER_IP = CONFIG.get("server_ip", SERVER_IP)
+SERVER_IP = CONFIG.get("server_ip", "<YOUR_SERVER_IP>")
+SUB_PORT = int(CONFIG.get("sub_port", 8443))
+WSTUNNEL_PORT = int(CONFIG.get("wstunnel_port", 8080))
+REALITY_PORT = 443
 TOKEN = CONFIG.get("token", "")
 TOTP_SECRET = CONFIG.get("totp_secret", "")
+
+# Strict SSL context for Sovereign Fortress HTTPS endpoints
+fortress_ssl_ctx = ssl.create_default_context(cafile=CA_PATH)
+
+def get_conn(timeout=10):
+    return http.client.HTTPSConnection(SERVER_IP, SUB_PORT, context=fortress_ssl_ctx, timeout=timeout)
 
 def get_current_totp(secret_str):
     if not secret_str:
@@ -67,7 +73,7 @@ def reset_rate_limit_counter():
     if not TOKEN:
         return
     try:
-        conn = http.client.HTTPConnection(SERVER_IP, SUB_PORT, timeout=4)
+        conn = get_conn(timeout=4)
         conn.request("GET", f"/sub/{TOKEN}", headers={"User-Agent": "RedTeam-Harness-Reset/1.0"})
         resp = conn.getresponse()
         resp.read()
@@ -94,7 +100,7 @@ def test_totp_replay_attack():
     print(f"[*] Generated valid TOTP code: {code}")
     print(f"[*] Submitting initial request to /sub/{code}...")
 
-    conn = http.client.HTTPConnection(SERVER_IP, SUB_PORT, timeout=10)
+    conn = get_conn(timeout=10)
     conn.request("GET", f"/sub/{code}", headers={"User-Agent": "RedTeam-Probe/1.0"})
     resp1 = conn.getresponse()
     status1 = resp1.status
@@ -106,7 +112,7 @@ def test_totp_replay_attack():
         print(f"[-] Initial request failed with HTTP {status1}. Waiting for next time step...")
         time.sleep(30 - (int(time.time()) % 30) + 2)
         code = get_current_totp(TOTP_SECRET)
-        conn = http.client.HTTPConnection(SERVER_IP, SUB_PORT, timeout=10)
+        conn = get_conn(timeout=10)
         conn.request("GET", f"/sub/{code}", headers={"User-Agent": "RedTeam-Probe/1.0"})
         resp1 = conn.getresponse()
         status1 = resp1.status
@@ -115,7 +121,7 @@ def test_totp_replay_attack():
         print(f"[+] Retry attempt: HTTP {status1}, bytes: {len(body1)}")
 
     print("[*] Immediately attempting sequential REPLAY with same TOTP code...")
-    conn = http.client.HTTPConnection(SERVER_IP, SUB_PORT, timeout=10)
+    conn = get_conn(timeout=10)
     conn.request("GET", f"/sub/{code}", headers={"User-Agent": "RedTeam-Probe/1.0"})
     resp2 = conn.getresponse()
     status2 = resp2.status
@@ -132,14 +138,13 @@ def test_totp_replay_attack():
     else:
         print(f"[+] Replay attempt rejected with HTTP {status2}.")
 
-    # Reset rate limit counter before concurrency probe
     reset_rate_limit_counter()
 
-    # Test concurrent race condition with identical TOTP (3 parallel requests < MAX_FAILED threshold of 5)
+    # Test concurrent race condition with identical TOTP
     print("[*] Testing concurrent race (3 parallel requests using same TOTP)...")
     def send_probe(_):
         try:
-            c = http.client.HTTPConnection(SERVER_IP, SUB_PORT, timeout=5)
+            c = get_conn(timeout=5)
             c.request("GET", f"/sub/{code}", headers={"User-Agent": "RedTeam-Probe/Race"})
             r = c.getresponse()
             s = r.status
@@ -153,7 +158,6 @@ def test_totp_replay_attack():
         results = list(ex.map(send_probe, range(3)))
     print(f"[*] Concurrent responses: {results}")
 
-    # Immediately reset rate limit counter so test runner is clean for subsequent attack phases
     reset_rate_limit_counter()
 
     replayed_200s = sum(1 for s in results if s == 200)
@@ -175,16 +179,14 @@ def test_ip_spoofing_attack():
     ]
 
     print("[*] Testing if server evaluates spoofed proxy headers for rate limiting...")
-    # The server should ONLY use socket client_address[0]
     for h in spoofed_headers:
         try:
-            conn = http.client.HTTPConnection(SERVER_IP, SUB_PORT, timeout=4)
+            conn = get_conn(timeout=4)
             h["User-Agent"] = "RedTeam-IPSpoof/1.0"
             conn.request("GET", "/sub/invalid_token_probe", headers=h)
             resp = conn.getresponse()
             resp.read()
             conn.close()
-            # Clear counter after probe so runner IP never reaches MAX_FAILED (5) threshold
             reset_rate_limit_counter()
         except Exception:
             pass
@@ -204,7 +206,7 @@ def test_path_traversal_and_methods():
 
     for p in probes:
         try:
-            conn = http.client.HTTPConnection(SERVER_IP, SUB_PORT, timeout=4)
+            conn = get_conn(timeout=4)
             conn.request("GET", p, headers={"User-Agent": "RedTeam-PathProbe/1.0"})
             resp = conn.getresponse()
             loc = resp.getheader("Location", "")
@@ -218,7 +220,7 @@ def test_path_traversal_and_methods():
     verbs = ["PUT", "DELETE", "OPTIONS", "TRACE"]
     for v in verbs:
         try:
-            conn = http.client.HTTPConnection(SERVER_IP, SUB_PORT, timeout=4)
+            conn = get_conn(timeout=4)
             conn.request(v, "/portal", headers={"User-Agent": "RedTeam-VerbProbe/1.0"})
             resp = conn.getresponse()
             loc = resp.getheader("Location", "")
@@ -238,9 +240,6 @@ def test_reality_handshake():
         sock.connect((SERVER_IP, REALITY_PORT))
 
         ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        
         tls_sock = ctx.wrap_socket(sock, server_hostname=sni)
         cipher = tls_sock.cipher()
         version = tls_sock.version()
@@ -254,18 +253,20 @@ def test_reality_handshake():
         return False
 
 def test_wstunnel_handshake():
-    print("\n--- ATTACK 5: WSTUNNEL WEBSOCKET UPGRADE (TCP 8080) ---")
+    print("\n--- ATTACK 5: WSTUNNEL WEBSOCKET UPGRADE (TCP 8080) WITH ROOT CA ---")
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(5.0)
         sock.connect((SERVER_IP, WSTUNNEL_PORT))
 
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
+        # Strict validation with private Sovereign Fortress Root CA
+        ctx = ssl.create_default_context(cafile=CA_PATH)
+        ctx.check_hostname = True
+        ctx.verify_mode = ssl.CERT_REQUIRED
 
         tls_sock = ctx.wrap_socket(sock, server_hostname="www.microsoft.com")
         print(f"[+] WSTunnel TLS Connection established: {tls_sock.version()}")
+        print(f"    Cert Verified: Subject={tls_sock.getpeercert()['subject']}")
 
         # Send WebSocket upgrade request
         key = base64.b64encode(os.urandom(16)).decode('utf-8')
@@ -291,7 +292,7 @@ def test_csrf_token_rotation():
     print("\n--- ATTACK 6: CSRF ON SESSION TOKEN ROTATION ---")
     # Test 1: Unauthenticated POST
     try:
-        conn = http.client.HTTPConnection(SERVER_IP, SUB_PORT, timeout=4)
+        conn = get_conn(timeout=4)
         conn.request("POST", "/portal/rotate-token", body=b"", headers={"User-Agent": "RedTeam-CSRF"})
         resp = conn.getresponse()
         body = resp.read().decode()
@@ -302,7 +303,7 @@ def test_csrf_token_rotation():
 
     # Test 2: Authenticated POST with fake cookie and missing X-Fortress-CSRF
     try:
-        conn = http.client.HTTPConnection(SERVER_IP, SUB_PORT, timeout=4)
+        conn = get_conn(timeout=4)
         conn.request("POST", "/portal/rotate-token", body=b"", headers={
             "User-Agent": "RedTeam-CSRF",
             "Cookie": "sf_session=fake_cookie_attempt"
@@ -314,13 +315,14 @@ def test_csrf_token_rotation():
     except Exception as e:
         print(f"[*] CSRF POST error: {e}")
 
-    # Test 3: Valid authenticated session POST without X-Fortress-CSRF header (Strict CSRF Defense Check)
+    # Test 3: Valid authenticated session POST without X-Fortress-CSRF header
     if TOKEN:
         try:
             cj = http.cookiejar.CookieJar()
-            opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
+            https_h = urllib.request.HTTPSHandler(context=fortress_ssl_ctx)
+            opener = urllib.request.build_opener(https_h, urllib.request.HTTPCookieProcessor(cj))
             login_data = urllib.parse.urlencode({'auth_credential': TOKEN}).encode()
-            login_req = urllib.request.Request(f"http://{SERVER_IP}:{SUB_PORT}/portal/login", data=login_data)
+            login_req = urllib.request.Request(f"https://{SERVER_IP}:{SUB_PORT}/portal/login", data=login_data)
             login_resp = opener.open(login_req)
             session_cookie = None
             for c in cj:
@@ -329,8 +331,7 @@ def test_csrf_token_rotation():
                     break
             
             if session_cookie:
-                # Attempt rotate-token with valid session but WITHOUT X-Fortress-CSRF header
-                conn = http.client.HTTPConnection(SERVER_IP, SUB_PORT, timeout=4)
+                conn = get_conn(timeout=4)
                 conn.request("POST", "/portal/rotate-token", body=b"", headers={
                     "User-Agent": "RedTeam-CSRF-Exploit",
                     "Cookie": session_cookie

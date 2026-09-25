@@ -641,25 +641,26 @@ def get_singbox_json_config(mode="full"):
     hy2_sal_tls = {
         "enabled": True,
         "server_name": "www.microsoft.com",
-        "insecure": True,
         "alpn": ["h3"]
     }
     hy2_std_tls = {
         "enabled": True,
         "server_name": "www.microsoft.com",
-        "insecure": True,
         "alpn": ["h3"]
     }
     tuic_tls = {
         "enabled": True,
         "server_name": "www.microsoft.com",
-        "insecure": True,
         "alpn": ["h3"]
     }
     if ca_pem:
         hy2_sal_tls["certificate"] = [ca_pem]
         hy2_std_tls["certificate"] = [ca_pem]
         tuic_tls["certificate"] = [ca_pem]
+    else:
+        hy2_sal_tls["insecure"] = True
+        hy2_std_tls["insecure"] = True
+        tuic_tls["insecure"] = True
 
     if is_traffic_only:
         dns_config = {
@@ -963,9 +964,9 @@ def render_login_page(error_msg=None):
     return LOGIN_HTML_TEMPLATE.replace("{{ERR_HTML}}", err_html)
 
 def render_dashboard_page(token, totp_secret):
-    sub_full_url = f"http://{SERVER_IP}:{PORT}/sub/{token}?mode=full"
-    sub_traffic_url = f"http://{SERVER_IP}:{PORT}/sub/{token}?mode=traffic-only"
-    sub_b64_url = f"http://{SERVER_IP}:{PORT}/sub/{token}/b64"
+    sub_full_url = f"https://{SERVER_IP}:{PORT}/sub/{token}?mode=full"
+    sub_traffic_url = f"https://{SERVER_IP}:{PORT}/sub/{token}?mode=traffic-only"
+    sub_b64_url = f"https://{SERVER_IP}:{PORT}/sub/{token}/b64"
     hiddify_full = f"hiddify://import/{sub_full_url}#Sovereign%20Fortress%20(Full%20Tunnel)"
     hiddify_traffic = f"hiddify://import/{sub_traffic_url}#Sovereign%20Fortress%20(Traffic-Only)"
     vless, hy2_sal, hy2_std, tuic, ss, wg_native, wg_tcp = get_protocol_links()
@@ -1332,27 +1333,6 @@ class FortressSubHandler(BaseHTTPRequestHandler):
 
         self.send_redirect_to_decoy()
 
-class AutoDetectServer(ThreadingMixIn, HTTPServer):
-    daemon_threads = True
-    def __init__(self, addr, handler, ssl_ctx=None):
-        super().__init__(addr, handler)
-        self.ssl_ctx = ssl_ctx
-
-    def finish_request(self, request, client_address):
-        if self.ssl_ctx:
-            try:
-                request.settimeout(1.0)
-                first_byte = request.recv(1, socket.MSG_PEEK)
-                request.settimeout(None)
-                if first_byte == b'\x16':
-                    request = self.ssl_ctx.wrap_socket(request, server_side=True)
-            except Exception:
-                try:
-                    request.settimeout(None)
-                except Exception:
-                    pass
-        super().finish_request(request, client_address)
-
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
 
@@ -1365,39 +1345,25 @@ def main():
         cert_path = os.path.join(DISK_DIR, "cert.pem")
         key_path = os.path.join(DISK_DIR, "key.pem")
 
-    ssl_ctx = None
-    if os.path.exists(cert_path) and os.path.exists(key_path):
-        try:
-            ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-            ssl_ctx.load_cert_chain(certfile=cert_path, keyfile=key_path)
-            print("[+] TLS certificate chain loaded successfully.")
-        except Exception as e:
-            print(f"[-] Warning: Failed to initialize TLS: {e}")
+    if not (os.path.exists(cert_path) and os.path.exists(key_path)):
+        print("[-] Fatal: TLS certificate and key must be available. HTTPS is strictly enforced.")
+        sys.exit(1)
 
-    # 1. Primary Dual-Protocol Server on PORT (8443)
-    # Serves plain HTTP for Hiddify / mobile apps and auto-detects HTTPS for browsers
-    server_primary = AutoDetectServer(("0.0.0.0", PORT), FortressSubHandler, ssl_ctx)
-    print(f"[+] Sovereign Fortress Dual-Protocol Subscription Server online on port {PORT} (Auto HTTP/HTTPS)")
+    ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ssl_ctx.load_cert_chain(certfile=cert_path, keyfile=key_path)
+    ssl_ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    print("[+] TLS certificate chain loaded successfully.")
 
-    # 2. Dedicated HTTPS Server on port 8444 for secure web portal
-    if ssl_ctx:
-        def start_dedicated_https():
-            try:
-                https_port = 8444
-                server_https = ThreadedHTTPServer(("0.0.0.0", https_port), FortressSubHandler)
-                server_https.socket = ssl_ctx.wrap_socket(server_https.socket, server_side=True)
-                print(f"[+] Sovereign Fortress Dedicated HTTPS Portal online on port {https_port}")
-                server_https.serve_forever()
-            except Exception as ex:
-                print(f"[-] Dedicated HTTPS server error: {ex}")
-
-        t_https = threading.Thread(target=start_dedicated_https, daemon=True)
-        t_https.start()
+    # Strictly HTTPS-Only Server on PORT (8443)
+    # The socket is wrapped directly with TLS; unencrypted HTTP requests fail at the TLS layer.
+    server_https = ThreadedHTTPServer(("0.0.0.0", PORT), FortressSubHandler)
+    server_https.socket = ssl_ctx.wrap_socket(server_https.socket, server_side=True)
+    print(f"[+] Sovereign Fortress HTTPS-Only Subscription & Portal Server online on port {PORT} (Strict TLS)")
 
     try:
-        server_primary.serve_forever()
+        server_https.serve_forever()
     except KeyboardInterrupt:
-        server_primary.server_close()
+        server_https.server_close()
 
 if __name__ == "__main__":
     main()
