@@ -39,12 +39,16 @@ if os.path.exists(CONFIG_PATH):
     except Exception:
         pass
 
-SERVER_IP = CONFIG.get("server_ip", "<YOUR_SERVER_IP>")
+SERVER_IP = CONFIG.get("server_ip") or os.environ.get("FORTRESS_SERVER_IP")
 SUB_PORT = int(CONFIG.get("sub_port", 8443))
 WSTUNNEL_PORT = int(CONFIG.get("wstunnel_port", 8080))
 REALITY_PORT = 443
 TOKEN = CONFIG.get("token", "")
 TOTP_SECRET = CONFIG.get("totp_secret", "")
+
+if not SERVER_IP or SERVER_IP.startswith("<"):
+    print("[-] Error: server_ip must be configured in fortress_config.json or FORTRESS_SERVER_IP")
+    sys.exit(1)
 
 # Strict SSL context for Sovereign Fortress HTTPS endpoints
 fortress_ssl_ctx = ssl.create_default_context(cafile=CA_PATH)

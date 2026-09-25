@@ -56,7 +56,8 @@ CONFIG = {
     "wstunnel_port": 8080,
     "cert_sha256": "",
     "pin_sha256": "",
-    "nextdns_id": "<YOUR_NEXTDNS_ID>"
+    "nextdns_id": "",
+    "campus_domain": "campus.internal"
 }
 
 for cp in CONFIG_PATHS:
@@ -84,6 +85,8 @@ WG_CLIENT_IP = CONFIG.get("wg_client_ip", "10.8.0.2")
 WSTUNNEL_PORT = int(CONFIG.get("wstunnel_port", 8080))
 CERT_SHA256 = CONFIG.get("cert_sha256", "")
 PIN_SHA256 = CONFIG.get("pin_sha256", "")
+CAMPUS_DOMAIN = CONFIG.get("campus_domain", "campus.internal")
+NEXTDNS_ID = CONFIG.get("nextdns_id", "")
 
 # Fallback: Extract from live /run/fortress/config.json if running on server without master config
 if REALITY_PUBKEY.startswith("<") or not REALITY_PUBKEY or HY2_PASSWORD.startswith("<"):
@@ -187,7 +190,7 @@ DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
                 <div class="brand-icon">🛡️</div>
                 <div>
                     <h1>SOVEREIGN FORTRESS</h1>
-                    <p>Oracle Cloud Mumbai (<YOUR_SERVER_IP>) • 100% Volatile RAM (tmpfs) • Sing-box 1.11+</p>
+                    <p>Sovereign Fortress Gateway ({{SERVER_IP}}) • 100% Volatile RAM (tmpfs) • Sing-box 1.11+</p>
                 </div>
             </div>
             <div class="status-pill">
@@ -207,7 +210,7 @@ DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
                     </div>
                     <h3 style="font-size: 17px; font-weight: 700; color: #fff; margin-bottom: 6px;">Full Tunnel (Sovereign DNS)</h3>
                     <p style="color: #94a3b8; font-size: 12px; line-height: 1.5; margin-bottom: 12px;">
-                        100% of IP traffic and DNS is encrypted to Mumbai. Resolves recursively via the VPS Unbound resolver (<code>127.0.0.1:5335</code>) with DNSSEC validation. <strong>Zero 3rd-party logs, no NextDNS</strong>. Best for Android/iOS & non-YogaDNS PCs.
+                        100% of IP traffic and DNS is encrypted to server. Resolves recursively via the VPS Unbound resolver (<code>127.0.0.1:5335</code>) with DNSSEC validation. <strong>Zero 3rd-party logs</strong>. Best for Android/iOS & non-YogaDNS PCs.
                     </p>
                     <div class="url-box" style="margin-bottom: 14px;">
                         <code>{{SUB_FULL_URL}}</code>
@@ -229,7 +232,7 @@ DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
                         <span style="font-size: 13px; font-weight: 800; color: #c084fc; text-transform: uppercase; letter-spacing: 0.5px;">⚡ Profile 2: Traffic-Only</span>
                         <span style="background: rgba(168,85,247,0.15); color: #c084fc; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px;">YogaDNS Compatible</span>
                     </div>
-                    <h3 style="font-size: 17px; font-weight: 700; color: #fff; margin-bottom: 6px;">Traffic-Only (YogaDNS + NextDNS <YOUR_NEXTDNS_ID>)</h3>
+                    <h3 style="font-size: 17px; font-weight: 700; color: #fff; margin-bottom: 6px;">Traffic-Only (YogaDNS + Custom DNS)</h3>
                     <p style="color: #94a3b8; font-size: 12px; line-height: 1.5; margin-bottom: 12px;">
                         Web/TCP/UDP traffic is tunneled. <strong>DNS is routed directly</strong> (ports 53 & 853 direct, NextDNS IPs <code>45.90.28.0/24</code> direct). <strong>Zero WFP conflicts with YogaDNS</strong> on Windows!
                     </p>
@@ -260,7 +263,7 @@ DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
                 <h2 id="qr-title">Universal Full Tunnel Subscription QR</h2>
                 <p id="qr-desc" style="color:#94a3b8; font-size:13px; margin-top:4px;">
                     Scan with <strong>Hiddify App</strong> on Android / iOS / Windows. Includes automatic 
-                    <strong>Campus Intranet Split-Routing</strong> (*.campus.internal & 10.0.0.0/8 bypass directly).
+                    <strong>Campus Intranet Split-Routing</strong> (*.{{CAMPUS_DOMAIN}} & 10.0.0.0/8 bypass directly).
                 </p>
                 <div class="url-box">
                     <code id="qr-url-text">{{SUB_FULL_URL}}</code>
@@ -371,7 +374,7 @@ DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
             document.getElementById('tab-full').className = isFull ? 'btn btn-primary' : 'btn btn-sec';
             document.getElementById('tab-traffic').className = isFull ? 'btn btn-sec' : 'btn btn-primary';
             document.getElementById('qr-title').innerText = isFull ? 'Universal Full Tunnel Subscription QR' : 'Universal Traffic-Only Subscription QR';
-            document.getElementById('qr-desc').innerText = isFull ? 'Encrypted VPS-Hosted Unbound DNS (Zero Logs) + Full IP Proxy.' : 'Direct DNS Bypass for YogaDNS & NextDNS (<YOUR_NEXTDNS_ID>) + Web Proxy.';
+            document.getElementById('qr-desc').innerText = isFull ? 'Encrypted VPS-Hosted Unbound DNS (Zero Logs) + Full IP Proxy.' : 'Direct DNS Bypass for YogaDNS & Custom DNS + Web Proxy.';
             var targetUrl = isFull ? fullSubUrl : trafficSubUrl;
             document.getElementById('qr-url-text').innerText = targetUrl;
             document.getElementById('qr-hiddify-btn').href = isFull ? fullHiddify : trafficHiddify;
@@ -406,7 +409,7 @@ DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
 
             var totpSec = "{{TOTP_SECRET}}";
             if (totpSec && totpSec !== "Configuring...") {
-                var otpUri = "otpauth://totp/ubuntu@<YOUR_SERVER_IP>?secret=" + totpSec + "&issuer=SovereignFortress";
+                var otpUri = "otpauth://totp/ubuntu@" + "{{SERVER_IP}}" + "?secret=" + totpSec + "&issuer=SovereignFortress";
                 new QRCode(document.getElementById("totp-qr"), {
                     text: otpUri,
                     width: 120,
@@ -603,7 +606,7 @@ def get_singbox_json_config(mode="full"):
     - strict_route: false + route_exclude_address to prevent YogaDNS / Chrome WFP deadlock
     - All 7 protocols included + auto-fastest URLTest balancer
     - Cryptographically verified TLS with embedded private CA (no insecure: true)
-    - Complete campus split-routing for *.campus.internal and 10.0.0.0/8
+    - Complete campus split-routing for *.{{CAMPUS_DOMAIN}} and 10.0.0.0/8
     - mode="full": Tunnel-Encrypted DNS + Full IP Proxy
     - mode="traffic-only": Direct DNS (YogaDNS / NextDNS / Chrome Secure DNS coexistence) + Web Proxy
     """
@@ -695,11 +698,11 @@ def get_singbox_json_config(mode="full"):
             "rules": [
                 {
                     "domain": [
-                        "campus.internal"
+                        CAMPUS_DOMAIN
                     ],
                     "domain_suffix": [
-                        "campus.internal",
-                        ".campus.internal",
+                        CAMPUS_DOMAIN,
+                        f".{CAMPUS_DOMAIN}",
                         "local",
                         ".local",
                         "internal",
@@ -876,11 +879,11 @@ def get_singbox_json_config(mode="full"):
         },
         {
             "domain": [
-                "campus.internal"
+                CAMPUS_DOMAIN
             ],
             "domain_suffix": [
-                "campus.internal",
-                ".campus.internal",
+                CAMPUS_DOMAIN,
+                f".{CAMPUS_DOMAIN}",
                 "local",
                 ".local",
                 "internal",
@@ -972,6 +975,8 @@ def render_dashboard_page(token, totp_secret):
     vless, hy2_sal, hy2_std, tuic, ss, wg_native, wg_tcp = get_protocol_links()
 
     html = DASHBOARD_HTML_TEMPLATE
+    html = html.replace("{{SERVER_IP}}", SERVER_IP)
+    html = html.replace("{{CAMPUS_DOMAIN}}", CAMPUS_DOMAIN)
     html = html.replace("{{SUB_FULL_URL}}", sub_full_url)
     html = html.replace("{{SUB_TRAFFIC_URL}}", sub_traffic_url)
     html = html.replace("{{SUB_URL}}", sub_full_url)

@@ -1,0 +1,22 @@
+{
+  "server_ip": "<YOUR_SERVER_IP>",
+  "sub_port": 8443,
+  "token": "<YOUR_SUBSCRIPTION_TOKEN>",
+  "totp_secret": "<YOUR_TOTP_SECRET>",
+  "uuid": "<YOUR_UUID>",
+  "reality_pubkey": "<YOUR_REALITY_PUBLIC_KEY>",
+  "reality_shortid": "<YOUR_REALITY_SHORT_ID>",
+  "reality_sni": "gateway.icloud.com",
+  "hy2_password": "<YOUR_HYSTERIA2_PASSWORD>",
+  "salamander_password": "<YOUR_SALAMANDER_PASSWORD>",
+  "ss_password": "<YOUR_SHADOWSOCKS_PASSWORD>",
+  "wg_server_pub": "<YOUR_WG_SERVER_PUB>",
+  "wg_client_priv": "<YOUR_WG_CLIENT_PRIV>",
+  "wg_client_ip": "10.8.0.2",
+  "wstunnel_port": 8080,
+  "nextdns_id": "<YOUR_NEXTDNS_ID>",
+  "cert_sha256": "",
+  "pin_sha256": "",
+  "ssh_key_path": "path/to/ssh_key.key",
+  "campus_domain": "campus.internal"
+}

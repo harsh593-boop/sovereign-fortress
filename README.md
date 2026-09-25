@@ -47,7 +47,7 @@ flowchart TD
     subgraph InternetExit["4. External Exit & Destination"]
         Decoy["Active Defense Handshake: gateway.icloud.com (Apple CDN)"]
         PublicWeb["Uncensored Global Internet"]
-        CampusLAN["IISER Berhampur Campus Intranet (*.campus.internal & 10.0.0.0/8)"]
+        CampusLAN["Campus / Local Intranet (*.campus.internal & 10.0.0.0/8)"]
     end
 
     ClientLayer -->|Encrypted Tunnel| DefenseGrid

@@ -352,7 +352,8 @@ class SovereignApp(tk.Tk):
         return None
 
     def open_hiddify(self):
-        hiddify_exe = r"C:\Program Files\Hiddify\Hiddify.exe"
+        prog_files = os.environ.get("ProgramFiles", r"C:\Program Files")
+        hiddify_exe = os.path.join(prog_files, "Hiddify", "Hiddify.exe")
         if os.path.exists(hiddify_exe):
             subprocess.Popen([hiddify_exe])
         else:

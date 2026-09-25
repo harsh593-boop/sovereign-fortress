@@ -17,14 +17,14 @@ Mode A: Full Traffic (Network Mode)
 Mode B: Split Intranet (Bypass LAN Mode)
 [Browser / Apps]
    |---> Campus Domains (*.campus.internal & 10.0.0.0/8) ---> [Physical Wi-Fi] ---> [Campus DHCP DNS (10.x.x.x)]
-   |---> Public Internet Traffic (Web, GitHub, Steam)   ---> [Sing-box TUN]   ---> [Encrypted Tunnel (Mumbai)]
+   |---> Public Internet Traffic (Web, GitHub, Steam)   ---> [Sing-box TUN]   ---> [Encrypted Tunnel (VPS)]
    |---> DNS for Public Internet (DoH)                 ---> [YogaDNS / NextDNS (Port 443)]
 ```
 
 ### Mode 1: Full Traffic (Network Mode)
 - **Routing Scope**: 100% of IP traffic (`0.0.0.0/0` and `::/0`) is captured by the virtual TUN adapter (`tun0` / WinTun).
 - **DNS Resolution**: Sing-box hijacks UDP/TCP port 53 (`action: hijack-dns`) and forwards all queries inside the encrypted tunnel directly to the server's self-hosted **Unbound** recursive resolver (`127.0.0.1:5335`).
-- **Privacy Guarantee**: Unbound queries the 13 root name servers directly using DNSSEC and QNAME minimisation. Zero ISP DNS logging, zero Cloudflare/Google DNS logging, zero Oracle VPC logging (`169.254.169.254` eliminated).
+- **Privacy Guarantee**: Unbound queries the 13 root name servers directly using DNSSEC and QNAME minimisation. Zero ISP DNS logging, zero Cloudflare/Google DNS logging, zero VPC logging (`169.254.169.254` eliminated).
 - **Limitation**: Campus intranet domains (`*.campus.internal`, internal Moodle, attendance servers) cannot resolve because public root DNS has no knowledge of internal campus private IP subnets.
 
 ### Mode 2: Split Intranet / Bypass LAN Mode (Traffic Only)
@@ -134,5 +134,5 @@ To eliminate the triple-interception collision in Chrome:
 | :--- | :--- | :--- |
 | **Campus Portal** | Resolves via 10.x.x.x and loads directly | Navigate to `portal.campus.internal` |
 | **NextDNS Logs** | Public domains appear in your NextDNS dashboard | Check `test.nextdns.io` in browser |
-| **VPN Tunnel** | IP shows Mumbai Oracle VM (`<YOUR_SERVER_IP>`) | Check `https://api.ipify.org` |
+| **VPN Tunnel** | IP shows VPS Public IP (`<YOUR_SERVER_IP>`) | Check `https://api.ipify.org` |
 | **DNS Leak** | No campus or ISP DNS servers exposed for public queries | Check `https://browserleaks.com/dns` |

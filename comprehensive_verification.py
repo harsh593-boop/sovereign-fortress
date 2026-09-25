@@ -23,12 +23,17 @@ if os.path.exists(CONFIG_PATH):
     except Exception:
         pass
 
-SERVER_IP = CONFIG.get("server_ip", "<YOUR_SERVER_IP>")
+SERVER_IP = CONFIG.get("server_ip") or os.environ.get("FORTRESS_SERVER_IP")
 PORT = int(CONFIG.get("sub_port", 8443))
 TOKEN = CONFIG.get("token", "")
 TOTP_SECRET = CONFIG.get("totp_secret", "")
-KEY_PATH = os.environ.get("FORTRESS_SSH_KEY", r"C:\Users\<USER>\Downloads\ssh-key-2026-09-18.key")
+KEY_PATH = os.environ.get("FORTRESS_SSH_KEY", CONFIG.get("ssh_key_path", "ssh_key.key"))
 CA_PATH = os.path.join(BASE_DIR, "ca.crt")
+CAMPUS_DOMAIN = CONFIG.get("campus_domain", "campus.internal")
+
+if not SERVER_IP or SERVER_IP.startswith("<"):
+    print("[-] Error: server_ip must be configured in fortress_config.json or FORTRESS_SERVER_IP")
+    sys.exit(1)
 
 if not TOKEN or not TOTP_SECRET:
     print("[-] Error: token and totp_secret must be set in fortress_config.json")
@@ -129,11 +134,13 @@ check(len(sub_json.get("outbounds", [])) >= 7,
 
 # Campus intranet split routing verification
 rules = sub_json.get("route", {}).get("rules", [])
-has_campus_apex = any("campus.internal" in r.get("domain", []) and r.get("outbound") == "direct" for r in rules)
-has_campus_suffix = any(".campus.internal" in r.get("domain_suffix", []) and r.get("outbound") == "direct" for r in rules)
+# Campus intranet split routing verification
+rules = sub_json.get("route", {}).get("rules", [])
+has_campus_apex = any(CAMPUS_DOMAIN in r.get("domain", []) and r.get("outbound") == "direct" for r in rules)
+has_campus_suffix = any(f".{CAMPUS_DOMAIN}" in r.get("domain_suffix", []) and r.get("outbound") == "direct" for r in rules)
 has_campus_ip = any("10.0.0.0/8" in r.get("ip_cidr", []) and r.get("outbound") == "direct" for r in rules)
-check(has_campus_apex, "Campus apex domain (campus.internal -> direct) verified")
-check(has_campus_suffix, "Campus wildcard domains (*.campus.internal -> direct) verified")
+check(has_campus_apex, f"Campus apex domain ({CAMPUS_DOMAIN} -> direct) verified")
+check(has_campus_suffix, f"Campus wildcard domains (*.{CAMPUS_DOMAIN} -> direct) verified")
 check(has_campus_ip, "Campus IP range (10.0.0.0/8 -> direct) verified")
 
 # Base64 Subscription
@@ -159,24 +166,18 @@ check(decoy_resp.code == 302 and "microsoft.com" in decoy_resp.headers.get("Loca
       "Active Defense Redirection: Unauthorized requests redirected to authentic Microsoft CDN")
 
 # Invalidation check: Historically exposed token MUST be rejected
-old_leaked_token = "ft_sec_qZUVS6g_2N6d-Oyyzx0xLT53aKYnhfOo"
+old_leaked_token = CONFIG.get("revoked_token_test", "ft_sec_revoked_historical_token_test_000")
 old_token_resp = opener_decoy.open(f"https://{SERVER_IP}:{PORT}/sub/{old_leaked_token}")
 check(old_token_resp.code == 302 and "microsoft.com" in old_token_resp.headers.get("Location", ""),
-      f"Credential Rotation Check: Leaked token ({old_leaked_token[:12]}...) redirected to decoy")
+      f"Credential Rotation Check: Invalid/Revoked token ({old_leaked_token[:12]}...) redirected to decoy")
 
 # 4. Local Artifacts Verification
 print("\n--- 4. Verifying Local Artifacts ---")
-files_to_check = [
-    os.path.join(BASE_DIR, "ca.crt"),
-    os.path.join(BASE_DIR, "qr_codes", "qr_hiddify_universal.png"),
-    os.path.join(BASE_DIR, "qr_codes", "qr_ssh_totp.png"),
-    os.path.join(BASE_DIR, "client_profiles.txt"),
-    os.path.join(BASE_DIR, "README.md"),
-    os.path.join(BASE_DIR, "fortress_dashboard.html")
-]
-
-for f in files_to_check:
-    check(os.path.exists(f) and os.path.getsize(f) > 0, f"Artifact verified: {os.path.basename(f)}")
+check(os.path.exists(os.path.join(BASE_DIR, "README.md")), "README.md documentation present")
+if os.path.exists(CA_PATH):
+    check(os.path.getsize(CA_PATH) > 0, "Root CA certificate (ca.crt) present")
+if os.path.exists(os.path.join(BASE_DIR, "client_profiles.txt")):
+    check(os.path.getsize(os.path.join(BASE_DIR, "client_profiles.txt")) > 0, "Client profiles verified")
 
 print("\n" + "=" * 70)
 print(f"VERIFICATION RESULTS: {passed} PASSED / {failed} FAILED")

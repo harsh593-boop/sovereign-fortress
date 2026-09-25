@@ -23,12 +23,17 @@ if os.path.exists(CONFIG_PATH):
     except Exception:
         pass
 
-SERVER_IP = CONFIG.get("server_ip", "<YOUR_SERVER_IP>")
+SERVER_IP = CONFIG.get("server_ip") or os.environ.get("FORTRESS_SERVER_IP")
 PORT = int(CONFIG.get("sub_port", 8443))
 TOKEN = CONFIG.get("token", "")
 TOTP_SECRET = CONFIG.get("totp_secret", "")
-KEY_PATH = os.environ.get("FORTRESS_SSH_KEY", r"C:\Users\<USER>\Downloads\ssh-key-2026-09-18.key")
+KEY_PATH = os.environ.get("FORTRESS_SSH_KEY", CONFIG.get("ssh_key_path", "ssh_key.key"))
 CA_PATH = os.path.join(BASE_DIR, "ca.crt")
+CAMPUS_DOMAIN = CONFIG.get("campus_domain", "campus.internal")
+
+if not SERVER_IP or SERVER_IP.startswith("<"):
+    print("[-] Error: server_ip must be configured in fortress_config.json or FORTRESS_SERVER_IP")
+    sys.exit(1)
 
 if not TOKEN or not TOTP_SECRET:
     print("[-] Error: token and totp_secret must be set in fortress_config.json")
@@ -105,13 +110,13 @@ check(not any(o.get("type") == "dns" for o in outbounds),
       "Legacy deprecated 'dns' outbound successfully removed from outbounds")
 
 # Check campus split routing
-campus_rule = next((r for r in rules if "campus.internal" in r.get("domain", [])), None)
+campus_rule = next((r for r in rules if CAMPUS_DOMAIN in r.get("domain", [])), None)
 check(campus_rule is not None and campus_rule.get("outbound") == "direct",
-      "Campus apex domain 'campus.internal' explicitly routed to direct")
+      f"Campus apex domain '{CAMPUS_DOMAIN}' explicitly routed to direct")
 
-campus_suffix = next((r for r in rules if ".campus.internal" in r.get("domain_suffix", [])), None)
+campus_suffix = next((r for r in rules if f".{CAMPUS_DOMAIN}" in r.get("domain_suffix", [])), None)
 check(campus_suffix is not None and campus_suffix.get("outbound") == "direct",
-      "Campus wildcard '*.campus.internal' explicitly routed to direct")
+      f"Campus wildcard '*.{CAMPUS_DOMAIN}' explicitly routed to direct")
 
 campus_ip = next((r for r in rules if "10.0.0.0/8" in r.get("ip_cidr", [])), None)
 check(campus_ip is not None and campus_ip.get("outbound") == "direct",
