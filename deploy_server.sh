@@ -58,9 +58,9 @@ chmod 700 "$DISK_DIR"
 
 if ! mountpoint -q "$RAM_DIR"; then
     mkdir -p "$RAM_DIR"
-    mount -t tmpfs -o size=256M,mode=0700 tmpfs "$RAM_DIR"
+    mount -t tmpfs -o size=256M,mode=0755 tmpfs "$RAM_DIR"
     if ! grep -q "$RAM_DIR" /etc/fstab; then
-        echo "tmpfs $RAM_DIR tmpfs defaults,size=256M,mode=0700 0 0" >> /etc/fstab
+        echo "tmpfs $RAM_DIR tmpfs defaults,size=256M,mode=0755 0 0" >> /etc/fstab
     fi
 fi
 chown -R "$FORTRESS_USER:$FORTRESS_USER" "$RAM_DIR"
