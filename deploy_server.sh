@@ -546,6 +546,23 @@ cp -f ${DISK_DIR}/wg0.conf ${RAM_DIR}/wireguard/wg0.conf 2>/dev/null || true
 
 ADMIN_USER="${SUDO_USER:-$(id -un 1000 2>/dev/null || echo "ubuntu")}"
 AUTH_FILE="/home/${ADMIN_USER}/.google_authenticator"
+if [ ! -f "${AUTH_FILE}" ]; then
+    echo "[*] Generating fresh, unique TOTP 2FA secret for ${ADMIN_USER}..."
+    if command -v google-authenticator >/dev/null 2>&1; then
+        su - "${ADMIN_USER}" -c "google-authenticator -t -d -f -r 3 -R 30 -w 3 -q" || true
+    fi
+    if [ ! -f "${AUTH_FILE}" ]; then
+        NEW_TOTP=$(python3 -c "import secrets, base64; print(base64.b32encode(secrets.token_bytes(20)).decode('utf-8').rstrip('='))" 2>/dev/null || openssl rand -base64 15 | tr -dc 'A-Z2-7' | head -c 32)
+        echo "${NEW_TOTP}" > "${AUTH_FILE}"
+        echo '" RATE_LIMIT 3 30' >> "${AUTH_FILE}"
+        echo '" WINDOW_SIZE 3' >> "${AUTH_FILE}"
+        echo '" DISALLOW_REUSE' >> "${AUTH_FILE}"
+        echo '" TOTP_AUTH' >> "${AUTH_FILE}"
+        chown "${ADMIN_USER}:${ADMIN_USER}" "${AUTH_FILE}"
+        chmod 400 "${AUTH_FILE}"
+    fi
+fi
+
 if [ -f "${AUTH_FILE}" ]; then
     head -n 1 "${AUTH_FILE}" > ${RAM_DIR}/totp_secret
     cp -f ${RAM_DIR}/totp_secret ${DISK_DIR}/totp_secret 2>/dev/null || true
@@ -646,11 +663,13 @@ netfilter-persistent save >/dev/null 2>&1 || true
 echo "[+] Hardened iptables rules ACTIVE and saved with netfilter-persistent."
 
 # 18. Save Master Configuration Output & Client WireGuard Profiles
+TOTP_SECRET_VAL=$(head -n 1 "${AUTH_FILE}" 2>/dev/null || true)
 cat <<EOF > "$DISK_DIR/fortress_config.json"
 {
   "server_ip": "${SERVER_IP}",
   "sub_port": 8443,
   "token": "${SUB_TOKEN}",
+  "totp_secret": "${TOTP_SECRET_VAL}",
   "uuid": "${UUID}",
   "reality_pubkey": "${REALITY_PUB}",
   "reality_shortid": "${REALITY_SHORTID}",
@@ -723,6 +742,10 @@ echo "[+] Traffic-Only Sub:     https://${SERVER_IP}:8443/sub/${SUB_TOKEN}?mode=
 echo "[+] Web Portal (HTTPS):   https://${SERVER_IP}:8443/portal"
 echo "[+] Recursive DNS:      127.0.0.1:5335 (Unbound Zero-Log Root Hints)"
 echo "[+] Master Token:       ${SUB_TOKEN}"
+if [ -n "${TOTP_SECRET_VAL}" ]; then
+    echo "[+] 2FA Secret Key:     ${TOTP_SECRET_VAL}"
+    echo "[+] 2FA Setup URI:      otpauth://totp/${ADMIN_USER}@${SERVER_IP}?secret=${TOTP_SECRET_VAL}&issuer=SovereignFortress"
+fi
 echo "[+] Sandboxing:         Dedicated unprivileged user 'fortress' + Systemd Strict"
 echo "[+] Firewall:           UFW Active & IPv6 Leak Drop Enforced"
 echo "[+] Master Config:      ${DISK_DIR}/fortress_config.json"

@@ -591,9 +591,9 @@ def verify_session_cookie(cookie_str: str) -> bool:
 def get_protocol_links():
     pin_param = f"&pinSHA256={PIN_SHA256}" if PIN_SHA256 else ""
     vless = f"vless://{UUID}@{SERVER_IP}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni={REALITY_SNI}&fp=chrome&pbk={REALITY_PUBKEY}&sid={REALITY_SHORTID}&type=tcp&headerType=none#Fortress-Reality-TCP"
-    hy2_sal = f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:9444?insecure=1&sni=www.microsoft.com&alpn=h3&obfs=salamander&obfs-password={SALAMANDER_PASSWORD}{pin_param}#Fortress-Hysteria2-Salamander"
-    hy2_std = f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:8443?insecure=1&sni=www.microsoft.com&alpn=h3{pin_param}#Fortress-Hysteria2-Standard"
-    tuic = f"tuic://{UUID}:{HY2_PASSWORD}@{SERVER_IP}:9443?congestion_control=bbr&alpn=h3&sni=www.microsoft.com&allow_insecure=1{pin_param}#Fortress-TUIC5-UDP"
+    hy2_sal = f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:9444?sni=www.microsoft.com&alpn=h3&obfs=salamander&obfs-password={SALAMANDER_PASSWORD}{pin_param}#Fortress-Hysteria2-Salamander"
+    hy2_std = f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:8443?sni=www.microsoft.com&alpn=h3{pin_param}#Fortress-Hysteria2-Standard"
+    tuic = f"tuic://{UUID}:{HY2_PASSWORD}@{SERVER_IP}:9443?congestion_control=bbr&alpn=h3&sni=www.microsoft.com{pin_param}#Fortress-TUIC5-UDP"
     ss = f"ss://MjAyMi1ibGFrZTMtYWVzLTI1Ni1nY206{SS_PASSWORD}@{SERVER_IP}:10443#Fortress-Shadowsocks2022"
     wg_native = f"wg://{SERVER_IP}:51820?publickey={urllib.parse.quote(WG_SERVER_PUB)}&privkey={urllib.parse.quote(WG_CLIENT_PRIV)}&address={WG_CLIENT_IP}%2F32&dns=1.1.1.1#Fortress-WireGuard-Native"
     wg_tcp = f"wstunnel://{SERVER_IP}:{WSTUNNEL_PORT}?sni=www.microsoft.com&prefix=&tunnel=127.0.0.1:51820#Fortress-WireGuard-TCP"
@@ -952,12 +952,16 @@ LOGIN_HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="card">
         <div class="shield">🛡️</div>
         <h1>SOVEREIGN FORTRESS</h1>
-        <p>Enter Master Secret Token OR 6-digit Google Authenticator code</p>
+        <p style="margin-bottom: 12px;">Authentication Required</p>
         {{ERR_HTML}}
         <form method="POST" action="/portal/login">
-            <input type="password" name="auth_credential" placeholder="Token or 6-digit TOTP" required autofocus autocomplete="off">
+            <input type="password" name="auth_credential" placeholder="Token (ft_sec_...) or 6-digit TOTP" required autofocus autocomplete="off">
             <button type="submit" class="btn">AUTHENTICATE</button>
         </form>
+        <div style="margin-top: 16px; font-size: 11px; color: #64748b; line-height: 1.5; text-align: left; background: #070b14; padding: 10px; border-radius: 8px; border: 1px solid #1e293b;">
+            <strong style="color: #94a3b8;">First-time setup:</strong> Enter your Master Secret Token (<code style="color: #38bdf8;">ft_sec_...</code>) to unlock the dashboard and scan your 2FA QR code.<br><br>
+            <strong style="color: #94a3b8;">Already paired:</strong> Enter the live 6-digit code from Google Authenticator.
+        </div>
     </div>
 </body>
 </html>"""

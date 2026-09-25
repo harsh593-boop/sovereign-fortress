@@ -110,7 +110,7 @@
       "tls": {
         "enabled": true,
         "server_name": "www.microsoft.com",
-        "insecure": true,
+        "insecure": false,
         "alpn": ["h3"],
         "certificate": [
           "<YOUR_CA_CERT_PEM>"
@@ -126,7 +126,7 @@
       "tls": {
         "enabled": true,
         "server_name": "www.microsoft.com",
-        "insecure": true,
+        "insecure": false,
         "alpn": ["h3"],
         "certificate": [
           "<YOUR_CA_CERT_PEM>"
@@ -144,7 +144,7 @@
       "tls": {
         "enabled": true,
         "server_name": "www.microsoft.com",
-        "insecure": true,
+        "insecure": false,
         "alpn": ["h3"],
         "certificate": [
           "<YOUR_CA_CERT_PEM>"

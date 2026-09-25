@@ -152,11 +152,33 @@ The automated installer will:
 1. Create dedicated unprivileged system user `fortress` with minimal network binding capability (`CAP_NET_BIND_SERVICE`) and strict systemd sandboxing.
 2. Mount a 256 MB volatile RAM disk (`tmpfs`) at `/run/fortress` for zero disk logs.
 3. Install Sing-box 1.11.4 Core and WSTunnel with SHA-256 cryptographic verification.
-4. Configure Unbound recursive zero-log DNS resolver on `127.0.0.1:5335`.
-5. Configure Fail2ban intrusion defense and Google Authenticator PAM 2FA for SSH.
-6. Enforce strict UFW firewall policies and disable IPv6 to prevent network leaks.
-7. Launch the dynamic HTTPS subscription daemon and management portal on port `8443`.
-8. Output your live HTTPS subscription URL, WireGuard profiles, and QR codes!
+4. Generate 100% unique, high-entropy cryptographic keys for all protocols (UUID, x25519 Reality keypairs, Hysteria 2 / Salamander passwords, Shadowsocks-2022 AEAD keys, WireGuard keypairs, and a 128-bit Master Subscription Token `ft_sec_...`).
+5. Configure Unbound recursive zero-log DNS resolver on `127.0.0.1:5335`.
+6. Configure Fail2ban intrusion defense and automatically generate a unique Google Authenticator RFC 6238 TOTP 2FA secret for SSH and the Web Portal.
+7. Enforce strict firewall policies and disable IPv6 to prevent network leaks.
+8. Launch the dynamic HTTPS subscription daemon and management portal on port `8443`.
+9. Output your live HTTPS subscription URL, 2FA secret key, and generated `/etc/fortress/fortress_config.json`!
+
+### Configuring Your 2FA Authenticator & Client App
+When deployment finishes:
+1. **Copy `/etc/fortress/fortress_config.json`** to your local machine as `fortress_config.json`.
+2. **Register 2FA in Google Authenticator / Aegis / 2FAS**:
+   * **In the Windows App**: Run `Launch Sovereign Fortress.bat` and click **`📱 2FA Setup QR`**. Scan the QR code or copy the secret key. The window displays a live 6-digit sync preview and countdown to confirm matching clocks!
+   * **In the Web Portal**: Open `https://<YOUR_SERVER_IP>:8443/portal` in your browser. Enter your Master Token (`ft_sec_...`) to unlock the dashboard and scan the 2FA QR code.
+   * **Via CLI**: Enter the `otpauth://...` URI or 32-character secret key printed at the end of `deploy_server.sh`.
+
+### Generating / Rotating Secrets Manually (Optional)
+If you ever want to generate your own unique tokens or rotate credentials independently:
+```bash
+# Generate a new 128-bit Master Subscription Token:
+python3 -c "import secrets; print('ft_sec_' + secrets.token_hex(16))"
+
+# Generate a new RFC 6238 Base32 2FA Secret Key:
+python3 -c "import secrets, base64; print(base64.b32encode(secrets.token_bytes(20)).decode('utf-8').rstrip('='))"
+
+# Generate a new VLESS UUIDv4:
+python3 -c "import uuid; print(uuid.uuid4())"
+```
 
 ---
 
@@ -175,9 +197,10 @@ The automated installer will:
 ### 2. Native Windows Desktop Application
 Launch `Launch Sovereign Fortress.bat` (or run `SovereignFortressApp.pyw`):
 * Dark-mode control center with real-time protocol port reachability and status indicators.
-* 1-Click import into Hiddify.
-* Integrated Web Portal and QR Code launcher.
-* Local DPAPI credential protection (`Protect-FortressVault.ps1`) and emergency overwrite panic switch (`Shred-Fortress.ps1`).
+* **`📱 2FA Setup QR`**: Native on-screen 2FA registration popup with live sync verification.
+* **`📲 Mobile Sub QR`**: Scan directly with phone camera to import all 7 protocols into Hiddify.
+* **`⚡ Launch Hiddify`**: 1-Click launcher with clipboard auto-copy.
+* Local DPAPI credential protection (`fortress_vault.py lock`) and emergency overwrite panic switch (`fortress_vault.py shred`).
 
 ### 3. YogaDNS Setup (for Campus Wi-Fi)
 See [`yogadns_rules.md`](yogadns_rules.md) for full step-by-step instructions:

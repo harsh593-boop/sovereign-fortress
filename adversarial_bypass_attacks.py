@@ -124,6 +124,7 @@ def test_totp_replay_attack():
         conn.close()
         print(f"[+] Retry attempt: HTTP {status1}, bytes: {len(body1)}")
 
+    time.sleep(0.5)
     print("[*] Immediately attempting sequential REPLAY with same TOTP code...")
     conn = get_conn(timeout=10)
     conn.request("GET", f"/sub/{code}", headers={"User-Agent": "RedTeam-Probe/1.0"})
@@ -324,7 +325,7 @@ def test_csrf_token_rotation():
         try:
             cj = http.cookiejar.CookieJar()
             https_h = urllib.request.HTTPSHandler(context=fortress_ssl_ctx)
-            opener = urllib.request.build_opener(https_h, urllib.request.HTTPCookieProcessor(cj))
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), https_h, urllib.request.HTTPCookieProcessor(cj))
             login_data = urllib.parse.urlencode({'auth_credential': TOKEN}).encode()
             login_req = urllib.request.Request(f"https://{SERVER_IP}:{SUB_PORT}/portal/login", data=login_data)
             login_resp = opener.open(login_req)
