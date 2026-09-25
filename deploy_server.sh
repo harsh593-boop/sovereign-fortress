@@ -544,8 +544,10 @@ cp -f ${DISK_DIR}/config.json.template ${RAM_DIR}/config.json 2>/dev/null || tru
 cp -f ${DISK_DIR}/fortress_config.json ${RAM_DIR}/fortress_config.json 2>/dev/null || true
 cp -f ${DISK_DIR}/wg0.conf ${RAM_DIR}/wireguard/wg0.conf 2>/dev/null || true
 
-if [ -f /home/ubuntu/.google_authenticator ]; then
-    head -n 1 /home/ubuntu/.google_authenticator > ${RAM_DIR}/totp_secret
+ADMIN_USER="${SUDO_USER:-$(id -un 1000 2>/dev/null || echo "ubuntu")}"
+AUTH_FILE="/home/${ADMIN_USER}/.google_authenticator"
+if [ -f "${AUTH_FILE}" ]; then
+    head -n 1 "${AUTH_FILE}" > ${RAM_DIR}/totp_secret
     cp -f ${RAM_DIR}/totp_secret ${DISK_DIR}/totp_secret 2>/dev/null || true
     chmod 640 ${RAM_DIR}/totp_secret ${DISK_DIR}/totp_secret 2>/dev/null || true
     chown ${FORTRESS_USER}:${FORTRESS_USER} ${RAM_DIR}/totp_secret ${DISK_DIR}/totp_secret 2>/dev/null || true

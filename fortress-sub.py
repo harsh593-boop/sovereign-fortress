@@ -29,8 +29,8 @@ RAM_DIR = "/run/fortress"
 DISK_DIR = "/etc/fortress"
 TOKEN_RAM = os.path.join(RAM_DIR, "sub_token")
 TOKEN_DISK = os.path.join(DISK_DIR, "sub_token")
-TOTP_SECRET_FILE = "/home/ubuntu/.google_authenticator"
-FALLBACK_TOTP_FILE = os.path.join(RAM_DIR, "totp_secret")
+TOTP_SECRET_FILE = os.path.join(RAM_DIR, "totp_secret")
+FALLBACK_TOTP_FILE = os.path.join(DISK_DIR, "totp_secret")
 
 # Dynamic Configuration Loader (No hardcoded credentials)
 CONFIG_PATHS = [
