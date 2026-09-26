@@ -182,6 +182,19 @@ python3 -c "import secrets, base64; print(base64.b32encode(secrets.token_bytes(2
 python3 -c "import uuid; print(uuid.uuid4())"
 ```
 
+### 🌐 Domain & Dynamic DNS (DDNS) Recommendations
+
+To enable globally trusted HTTPS certificates via Let's Encrypt (eliminating TLS warnings and enabling seamless mobile app imports), a domain name pointing to your server IP is recommended:
+
+| Option | Cost | Best For | SSL / TLS Provisioning | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| **DuckDNS** (`*.duckdns.org`) | **100% Free** | Quick setups, zero purchase required, dynamic VPS IPs | Let's Encrypt DNS-01 ACME challenge via DuckDNS API | Ideal for privacy research. An hourly cron job (`curl -s "https://www.duckdns.org/update?domains=YOUR_SUBDOMAIN&token=YOUR_TOKEN&ip="`) keeps the IP updated. |
+| **Cloudflare DNS** (`custom domain`) | Free with own domain | Production deployments, root domains, vanity URLs | Certbot DNS-01 ACME via `certbot-dns-cloudflare` plugin | Set proxy status to **DNS Only (Grey Cloud)** so UDP and custom proxy ports are not filtered by Cloudflare edge reverse proxies. |
+| **Direct Server IP** | **$0** | IP-only setups without domain registration | Self-Signed / Embedded Private CA | Supported out-of-the-box with embedded CA certificates, but requires trusting the CA on client devices. |
+
+> [!TIP]
+> **Privacy Best Practice**: Never commit your DuckDNS tokens, Cloudflare API credentials, or private domain hostnames to public Git repositories. Store them in local ignored configuration files (`fortress_config.json`) or environment variables.
+
 ---
 
 ## 💻 Client Applications & Connections
