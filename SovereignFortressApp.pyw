@@ -68,8 +68,8 @@ if os.path.exists(CONFIG_FILE):
 SERVER_IP = CONFIG.get("server_ip", "<YOUR_SERVER_IP>")
 SUB_PORT = CONFIG.get("sub_port", 8443)
 TOKEN = CONFIG.get("token", "<YOUR_SUBSCRIPTION_TOKEN>")
-SUB_URL = f"https://{SERVER_IP}:{SUB_PORT}/sub/{TOKEN}"
-SUB_URL_TRAFFIC_ONLY = f"https://{SERVER_IP}:{SUB_PORT}/sub/{TOKEN}?mode=traffic-only"
+SUB_URL = f"http://{SERVER_IP}:{SUB_PORT}/sub/{TOKEN}"
+SUB_URL_TRAFFIC_ONLY = f"http://{SERVER_IP}:{SUB_PORT}/sub/{TOKEN}?mode=traffic-only"
 HIDDIFY_DEEPLINK = f"hiddify://import/{SUB_URL}#SovereignFortress"
 PORTAL_URL = f"https://{SERVER_IP}:{SUB_PORT}/portal"
 
@@ -220,6 +220,16 @@ class SovereignApp(tk.Tk):
                                command=self.open_hiddify)
         btn_launch.pack(side="left", padx=3)
 
+        btn_copy_proxies = tk.Button(act_frame, text="📋 Copy Proxies", bg="#1f2937", fg="#38bdf8", activebackground="#374151",
+                                     activeforeground="#38bdf8", font=("Segoe UI", 9, "bold"), relief="flat", padx=8, pady=6, cursor="hand2",
+                                     command=self.copy_all_proxies)
+        btn_copy_proxies.pack(side="left", padx=3)
+
+        btn_copy_sub = tk.Button(act_frame, text="🔗 Copy Sub Link", bg="#1f2937", fg="#f3f4f6", activebackground="#374151",
+                                 activeforeground="#ffffff", font=("Segoe UI", 9), relief="flat", padx=8, pady=6, cursor="hand2",
+                                 command=self.copy_sub_link)
+        btn_copy_sub.pack(side="left", padx=3)
+
         btn_2fa_qr = tk.Button(act_frame, text="📱 2FA Setup QR", bg="#4f46e5", fg="#ffffff", activebackground="#4338ca",
                                activeforeground="#ffffff", font=("Segoe UI", 9, "bold"), relief="flat", padx=10, pady=6, cursor="hand2",
                                command=self.show_2fa_qr)
@@ -229,11 +239,6 @@ class SovereignApp(tk.Tk):
                                activeforeground="#ffffff", font=("Segoe UI", 9, "bold"), relief="flat", padx=10, pady=6, cursor="hand2",
                                command=self.show_sub_qr)
         btn_sub_qr.pack(side="left", padx=3)
-
-        btn_copy_sub = tk.Button(act_frame, text="📋 Copy Link", bg="#1f2937", fg="#f3f4f6", activebackground="#374151",
-                                 activeforeground="#ffffff", font=("Segoe UI", 9), relief="flat", padx=8, pady=6, cursor="hand2",
-                                 command=self.copy_sub_link)
-        btn_copy_sub.pack(side="left", padx=3)
 
         btn_portal = tk.Button(act_frame, text="🌐 Web Portal", bg="#1f2937", fg="#f3f4f6", activebackground="#374151",
                                activeforeground="#ffffff", font=("Segoe UI", 9), relief="flat", padx=8, pady=6, cursor="hand2",
@@ -581,6 +586,20 @@ class SovereignApp(tk.Tk):
         btn_close = tk.Button(win, text="Done", bg="#1f2937", fg="#f3f4f6", activebackground="#374151",
                               font=("Segoe UI", 9, "bold"), relief="flat", padx=16, pady=4, cursor="hand2", command=win.destroy)
         btn_close.pack(pady=8)
+
+    def copy_all_proxies(self):
+        direct_links = [p["link"] for p in PROTOCOLS if p["port_num"] > 0]
+        text = "\n".join(direct_links)
+        self.clipboard_clear()
+        self.clipboard_append(text)
+        messagebox.showinfo(
+            "Direct Proxies Copied",
+            f"All {len(direct_links)} direct protocol links copied to clipboard!\n\n"
+            "How to import into Hiddify:\n"
+            "1. In Hiddify, click '+' (top right)\n"
+            "2. Click 'Add from Clipboard' (or press Ctrl+V)\n\n"
+            "All proxies (Reality, Hysteria2, TUIC, Shadowsocks) will be imported directly with zero network connection needed!"
+        )
 
     def copy_sub_link(self):
         self.clipboard_clear()

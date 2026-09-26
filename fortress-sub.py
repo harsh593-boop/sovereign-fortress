@@ -974,8 +974,10 @@ def render_dashboard_page(token, totp_secret):
     sub_full_url = f"https://{SERVER_IP}:{PORT}/sub/{token}?mode=full"
     sub_traffic_url = f"https://{SERVER_IP}:{PORT}/sub/{token}?mode=traffic-only"
     sub_b64_url = f"https://{SERVER_IP}:{PORT}/sub/{token}/b64"
-    hiddify_full = f"hiddify://import/{sub_full_url}#Sovereign%20Fortress%20(Full%20Tunnel)"
-    hiddify_traffic = f"hiddify://import/{sub_traffic_url}#Sovereign%20Fortress%20(Traffic-Only)"
+    sub_http_full = f"http://{SERVER_IP}:{PORT}/sub/{token}?mode=full"
+    sub_http_traffic = f"http://{SERVER_IP}:{PORT}/sub/{token}?mode=traffic-only"
+    hiddify_full = f"hiddify://import/{sub_http_full}#Sovereign%20Fortress%20(Full%20Tunnel)"
+    hiddify_traffic = f"hiddify://import/{sub_http_traffic}#Sovereign%20Fortress%20(Traffic-Only)"
     vless, hy2_sal, hy2_std, tuic, ss, wg_native, wg_tcp = get_protocol_links()
 
     html = DASHBOARD_HTML_TEMPLATE
@@ -1342,8 +1344,27 @@ class FortressSubHandler(BaseHTTPRequestHandler):
 
         self.send_redirect_to_decoy()
 
-class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+class AutoDetectServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
+    def __init__(self, addr, handler, ssl_ctx=None):
+        super().__init__(addr, handler)
+        self.ssl_ctx = ssl_ctx
+
+    def get_request(self):
+        sock, addr = self.socket.accept()
+        if self.ssl_ctx:
+            try:
+                sock.settimeout(2.0)
+                first_byte = sock.recv(1, socket.MSG_PEEK)
+                sock.settimeout(None)
+                if first_byte == b'\x16':
+                    sock = self.ssl_ctx.wrap_socket(sock, server_side=True)
+            except Exception:
+                try:
+                    sock.settimeout(None)
+                except Exception:
+                    pass
+        return sock, addr
 
 def main():
     token = get_or_create_token()
@@ -1354,25 +1375,25 @@ def main():
         cert_path = os.path.join(DISK_DIR, "cert.pem")
         key_path = os.path.join(DISK_DIR, "key.pem")
 
-    if not (os.path.exists(cert_path) and os.path.exists(key_path)):
-        print("[-] Fatal: TLS certificate and key must be available. HTTPS is strictly enforced.")
-        sys.exit(1)
+    ssl_ctx = None
+    if os.path.exists(cert_path) and os.path.exists(key_path):
+        try:
+            ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            ssl_ctx.load_cert_chain(certfile=cert_path, keyfile=key_path)
+            ssl_ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+            print("[+] TLS certificate chain loaded successfully.")
+        except Exception as e:
+            print(f"[-] Warning: Failed to initialize TLS: {e}")
 
-    ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    ssl_ctx.load_cert_chain(certfile=cert_path, keyfile=key_path)
-    ssl_ctx.minimum_version = ssl.TLSVersion.TLSv1_2
-    print("[+] TLS certificate chain loaded successfully.")
-
-    # Strictly HTTPS-Only Server on PORT (8443)
-    # The socket is wrapped directly with TLS; unencrypted HTTP requests fail at the TLS layer.
-    server_https = ThreadedHTTPServer(("0.0.0.0", PORT), FortressSubHandler)
-    server_https.socket = ssl_ctx.wrap_socket(server_https.socket, server_side=True)
-    print(f"[+] Sovereign Fortress HTTPS-Only Subscription & Portal Server online on port {PORT} (Strict TLS)")
+    # Dual-Protocol Auto-Detect Server on PORT (8443)
+    # Serves plain HTTP for Hiddify / mobile apps (zero SSL errors) and auto-detects HTTPS for browsers
+    server_primary = AutoDetectServer(("0.0.0.0", PORT), FortressSubHandler, ssl_ctx)
+    print(f"[+] Sovereign Fortress Dual-Protocol Subscription & Portal Server online on port {PORT} (Auto HTTP/HTTPS)")
 
     try:
-        server_https.serve_forever()
+        server_primary.serve_forever()
     except KeyboardInterrupt:
-        server_https.server_close()
+        server_primary.server_close()
 
 if __name__ == "__main__":
     main()
