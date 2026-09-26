@@ -811,23 +811,6 @@ def get_singbox_json_config(mode="full"):
         "169.254.0.0/16",
         f"{SERVER_IP}/32"
     ]
-    if is_traffic_only:
-        tun_exclude.extend([
-            "45.90.28.0/24",
-            "45.90.30.0/24",
-            "1.1.1.1/32",
-            "1.0.0.1/32",
-            "8.8.8.8/32",
-            "8.8.4.4/32",
-            "9.9.9.9/32",
-            "149.112.112.112/32",
-            "94.140.14.14/32",
-            "94.140.15.15/32",
-            "208.67.222.222/32",
-            "208.67.220.220/32",
-            "76.76.2.0/24",
-            "76.76.10.0/24"
-        ])
 
     cfg = {
         "log": {
@@ -951,35 +934,6 @@ def get_singbox_json_config(mode="full"):
     if is_traffic_only:
         rules.append({"protocol": "dns", "outbound": "direct"})
         rules.append({"port": [53, 853], "outbound": "direct"})
-        rules.append({
-            "domain": [
-                "dns.nextdns.io",
-                "cloudflare-dns.com",
-                "one.one.one.one",
-                "dns.google",
-                "dns.quad9.net",
-                "dns.adguard.com",
-                "doh.controld.com"
-            ],
-            "domain_suffix": [
-                ".nextdns.io",
-                ".cloudflare-dns.com",
-                ".dns.google",
-                ".quad9.net",
-                ".adguard.com",
-                ".controld.com"
-            ],
-            "ip_cidr": [
-                "1.1.1.1/32", "1.0.0.1/32",
-                "8.8.8.8/32", "8.8.4.4/32",
-                "9.9.9.9/32", "149.112.112.112/32",
-                "45.90.28.0/24", "45.90.30.0/24",
-                "94.140.14.14/32", "94.140.15.15/32",
-                "208.67.222.222/32", "208.67.220.220/32",
-                "76.76.2.0/24", "76.76.10.0/24"
-            ],
-            "outbound": "direct"
-        })
     else:
         rules.append({"action": "hijack-dns"})
 
