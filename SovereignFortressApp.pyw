@@ -68,8 +68,11 @@ if os.path.exists(CONFIG_FILE):
 SERVER_IP = CONFIG.get("server_ip", "<YOUR_SERVER_IP>")
 SUB_PORT = CONFIG.get("sub_port", 8443)
 TOKEN = CONFIG.get("token", "<YOUR_SUBSCRIPTION_TOKEN>")
-SUB_URL = f"http://{SERVER_IP}:{SUB_PORT}/sub/{TOKEN}"
-SUB_URL_TRAFFIC_ONLY = f"http://{SERVER_IP}:{SUB_PORT}/sub/{TOKEN}?mode=traffic-only"
+SUB_URL_HTTPS = f"https://{SERVER_IP}:{SUB_PORT}/sub/{TOKEN}"
+SUB_URL_HTTP = f"http://{SERVER_IP}:{SUB_PORT}/sub/{TOKEN}"
+SUB_URL = SUB_URL_HTTPS
+SUB_URL_TRAFFIC_ONLY = f"https://{SERVER_IP}:{SUB_PORT}/sub/{TOKEN}?mode=traffic-only"
+SUB_URL_HTTP_TRAFFIC_ONLY = f"http://{SERVER_IP}:{SUB_PORT}/sub/{TOKEN}?mode=traffic-only"
 HIDDIFY_DEEPLINK = f"hiddify://import/{SUB_URL}#SovereignFortress"
 PORTAL_URL = f"https://{SERVER_IP}:{SUB_PORT}/portal"
 
@@ -534,8 +537,16 @@ class SovereignApp(tk.Tk):
         sub.pack(pady=(0, 6))
 
         mode_var = tk.StringVar(value="full")
-        mode_frame = tk.Frame(win, bg="#0b0f19")
-        mode_frame.pack(pady=4)
+        proto_var = tk.StringVar(value="https")
+
+        opts_frame = tk.Frame(win, bg="#0b0f19")
+        opts_frame.pack(pady=4)
+
+        mode_frame = tk.Frame(opts_frame, bg="#0b0f19")
+        mode_frame.pack(side="top", pady=2)
+
+        proto_frame = tk.Frame(opts_frame, bg="#0b0f19")
+        proto_frame.pack(side="top", pady=2)
 
         qr_lbl = tk.Label(win, bg="#0b0f19")
         qr_lbl.pack(pady=4)
@@ -546,8 +557,16 @@ class SovereignApp(tk.Tk):
         ent_url = tk.Entry(url_frame, font=("Consolas", 8), fg="#38bdf8", bg="#1e293b", relief="flat")
         ent_url.pack(side="left", fill="x", expand=True, padx=(0, 6))
 
+        def get_active_url():
+            is_split = (mode_var.get() == "split")
+            is_https = (proto_var.get() == "https")
+            if is_https:
+                return SUB_URL_TRAFFIC_ONLY if is_split else SUB_URL_HTTPS
+            else:
+                return SUB_URL_HTTP_TRAFFIC_ONLY if is_split else SUB_URL_HTTP
+
         def copy_current_url():
-            cur = SUB_URL if mode_var.get() == "full" else SUB_URL_TRAFFIC_ONLY
+            cur = get_active_url()
             self.clipboard_clear()
             self.clipboard_append(cur)
             btn_copy.config(text="✓ Copied!", fg="#34d399")
@@ -558,7 +577,7 @@ class SovereignApp(tk.Tk):
         btn_copy.pack(side="right")
 
         def render_qr():
-            url = SUB_URL if mode_var.get() == "full" else SUB_URL_TRAFFIC_ONLY
+            url = get_active_url()
             if HAS_QR:
                 qr = qrcode.QRCode(box_size=5, border=2)
                 qr.add_data(url)
@@ -581,6 +600,16 @@ class SovereignApp(tk.Tk):
                                   font=("Segoe UI", 9, "bold"), fg="#38bdf8", bg="#0b0f19", selectcolor="#111827",
                                   activebackground="#0b0f19", activeforeground="#38bdf8", command=render_qr)
         rb_split.pack(side="left", padx=8)
+
+        rb_https = tk.Radiobutton(proto_frame, text="🔒 HTTPS (Trusted CA)", variable=proto_var, value="https",
+                                  font=("Segoe UI", 8, "bold"), fg="#10b981", bg="#0b0f19", selectcolor="#111827",
+                                  activebackground="#0b0f19", activeforeground="#10b981", command=render_qr)
+        rb_https.pack(side="left", padx=8)
+
+        rb_http = tk.Radiobutton(proto_frame, text="🔓 HTTP (No-Cert Fallback)", variable=proto_var, value="http",
+                                 font=("Segoe UI", 8), fg="#9ca3af", bg="#0b0f19", selectcolor="#111827",
+                                 activebackground="#0b0f19", activeforeground="#9ca3af", command=render_qr)
+        rb_http.pack(side="left", padx=8)
 
         render_qr()
 
@@ -608,8 +637,15 @@ class SovereignApp(tk.Tk):
 
     def copy_sub_link(self):
         self.clipboard_clear()
-        self.clipboard_append(SUB_URL)
-        messagebox.showinfo("Copied", f"Universal Subscription URL copied to clipboard!\n\n{SUB_URL}\n\nIn Hiddify, paste this into '+ New Profile'.\nNotice: Do not share bearer subscription URLs with untrusted parties.")
+        self.clipboard_append(SUB_URL_HTTPS)
+        messagebox.showinfo(
+            "Copied",
+            f"Encrypted HTTPS Subscription URL copied to clipboard!\n\n{SUB_URL_HTTPS}\n\n"
+            "• Security: TLS 1.3 encrypted with Sovereign Fortress Root CA\n"
+            "• Windows: Pre-trusted via '🛡️ Trust CA'\n"
+            "• Hiddify: Click '+' -> 'Add from Clipboard'\n\n"
+            "Notice: Bearer token is confidential. Do not share with untrusted parties."
+        )
 
     def copy_text(self, text):
         self.clipboard_clear()
