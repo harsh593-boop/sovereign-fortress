@@ -71,6 +71,7 @@ for cp in CONFIG_PATHS:
             pass
 
 SERVER_IP = CONFIG.get("server_ip", "127.0.0.1")
+DOMAIN = CONFIG.get("domain", "")
 PORT = int(CONFIG.get("sub_port", 8443))
 UUID = CONFIG.get("uuid", "<YOUR_UUID>")
 REALITY_PUBKEY = CONFIG.get("reality_pubkey", "<YOUR_REALITY_PUBLIC_KEY>")
@@ -1014,7 +1015,25 @@ class FortressSubHandler(BaseHTTPRequestHandler):
     def get_client_ip(self):
         return self.client_address[0]
 
+    def enforce_https_upgrade(self):
+        is_ssl = isinstance(self.connection, ssl.SSLSocket)
+        req_host = self.headers.get("Host", "").split(":")[0].strip()
+        target_host = DOMAIN if (DOMAIN and not DOMAIN.startswith("<")) else SERVER_IP
+
+        # 1. If connection is plain HTTP, redirect to HTTPS
+        # 2. If DOMAIN is configured and client accessed via raw IP or other host, redirect to domain
+        if (not is_ssl) or (DOMAIN and req_host == SERVER_IP):
+            redirect_url = f"https://{target_host}:{PORT}{self.path}"
+            self.send_response(301)
+            self.send_header("Location", redirect_url)
+            self.send_header("Connection", "close")
+            self.end_headers()
+            return True
+        return False
+
     def do_HEAD(self):
+        if self.enforce_https_upgrade():
+            return
         self.do_GET(head_only=True)
 
     def do_OPTIONS(self):
@@ -1030,6 +1049,8 @@ class FortressSubHandler(BaseHTTPRequestHandler):
         self.send_redirect_to_decoy()
 
     def do_GET(self, head_only=False):
+        if self.enforce_https_upgrade():
+            return
         client_ip = self.get_client_ip()
         if is_ip_banned(client_ip):
             self.send_redirect_to_decoy()
@@ -1227,6 +1248,8 @@ class FortressSubHandler(BaseHTTPRequestHandler):
         self.send_redirect_to_decoy()
 
     def do_POST(self):
+        if self.enforce_https_upgrade():
+            return
         client_ip = self.get_client_ip()
         if is_ip_banned(client_ip):
             self.send_redirect_to_decoy()
