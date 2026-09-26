@@ -827,9 +827,17 @@ def get_singbox_json_config(mode="full"):
                     "172.19.0.1/30"
                 ],
                 "auto_route": True,
-                "strict_route": False,
+                "strict_route": True,
                 "route_exclude_address": tun_exclude,
-                "stack": "system",
+                "stack": "mixed",
+                "endpoint_independent_nat": True,
+                "sniff": True
+            },
+            {
+                "type": "mixed",
+                "tag": "mixed-in",
+                "listen": "127.0.0.1",
+                "listen_port": 2080,
                 "sniff": True
             }
         ],

@@ -222,12 +222,13 @@ cp -f /tmp/AdGuardHome/AdGuardHome /opt/AdGuardHome/AdGuardHome
 chmod 755 /opt/AdGuardHome/AdGuardHome
 rm -rf /tmp/AdGuardHome /tmp/agh.tar.gz
 
-chattr -i /opt/AdGuardHome/AdGuardHome.yaml 2>/dev/null || true
-
-NEXTDNS_ID=$(grep -Po '"nextdns_id":\s*"\K[^"]*' "$DISK_DIR/fortress_config.json" 2>/dev/null || echo "")
-UPSTREAM_NEXTDNS=""
-if [ -n "$NEXTDNS_ID" ] && [ "$NEXTDNS_ID" != "<YOUR_NEXTDNS_ID>" ]; then
-    UPSTREAM_NEXTDNS="    - tls://${NEXTDNS_ID}.dns.nextdns.io"
+# Mount AdGuard Home working data entirely on volatile RAM tmpfs (Zero Disk Footprint)
+mkdir -p /opt/AdGuardHome/data
+if ! mount | grep -q '/opt/AdGuardHome/data'; then
+    mount -t tmpfs -o size=32M,mode=0700,uid=${FORTRESS_USER},gid=${FORTRESS_USER} tmpfs /opt/AdGuardHome/data
+fi
+if ! grep -q '/opt/AdGuardHome/data' /etc/fstab; then
+    echo "tmpfs /opt/AdGuardHome/data tmpfs size=32M,mode=0700,uid=${FORTRESS_USER},gid=${FORTRESS_USER} 0 0" >> /etc/fstab
 fi
 
 cat <<EOF > /opt/AdGuardHome/AdGuardHome.yaml
@@ -263,7 +264,6 @@ dns:
   ratelimit_whitelist: []
   refuse_any: true
   upstream_dns:
-${UPSTREAM_NEXTDNS}
     - tls://dns.quad9.net
     - https://dns.quad9.net/dns-query
     - tls://one.one.one.one
