@@ -377,59 +377,59 @@ DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
 <div class="grid">
     <div class="proto-card">
         <div>
-            <div class="proto-title">🚀 Auto-Fastest [Dynamic Latency Balancer]</div>
+            <div class="proto-title">🚀 Fortress-Auto-Fastest [Dynamic Balancer]</div>
             <div class="proto-desc">Transport: Auto · Port: Auto · Real-time latency URLTest benchmarks all proxies and detours to lowest-ping route ('lowest' Balancer in Hiddify).</div>
         </div>
         <button class="btn btn-primary" onclick="copyText('{{SUB_URL}}', 'Auto-Fastest Subscription URL copied!')">Copy Balancer</button>
     </div>
     <div class="proto-card">
         <div>
-            <div class="proto-title"><span style="display:inline-flex;align-items:center;gap:6px;">{{LOGO_SVG_SM}} VLESS + XTLS-Reality (TCP 443)</span></div>
-            <div class="proto-desc">Transport: TCP · xtls-rprx-vision · Borrows authentic TLS cert signatures; active unauthenticated probers redirected to CDN decoy.</div>
+            <div class="proto-title"><span style="display:inline-flex;align-items:center;gap:6px;">{{LOGO_SVG_SM}} Fortress-Reality-TCP (VLESS 443)</span></div>
+            <div class="proto-desc">Transport: TCP · xtls-rprx-vision · Borrows authentic Apple TLS certificate (gateway.icloud.com); active unauthenticated probers redirected to CDN decoy.</div>
         </div>
         <button class="btn btn-sec" onclick="copyText('{{VLESS}}', 'VLESS Link copied!')">Copy Link</button>
     </div>
     <div class="proto-card">
         <div>
-            <div class="proto-title">⚡ Hysteria 2 Salamander (UDP 9444)</div>
+            <div class="proto-title">⚡ Fortress-Hysteria2-Salamander (UDP 9444)</div>
             <div class="proto-desc">Transport: UDP · ChaCha20 XOR + BLAKE3 · ChaCha20 XOR header scrambling for link resilience across lossy wireless channels.</div>
         </div>
         <button class="btn btn-sec" onclick="copyText('{{HY2_SAL}}', 'Salamander Link copied!')">Copy Link</button>
     </div>
     <div class="proto-card">
         <div>
-            <div class="proto-title">🚀 Hysteria 2 Standard (UDP 8443)</div>
+            <div class="proto-title">🚀 Fortress-Hysteria2-Standard (UDP 8443)</div>
             <div class="proto-desc">Transport: UDP · BBR Congestion Control over QUIC · High throughput on lossy wireless channels. Optimized for media streaming.</div>
         </div>
         <button class="btn btn-sec" onclick="copyText('{{HY2_STD}}', 'Hysteria 2 Link copied!')">Copy Link</button>
     </div>
     <div class="proto-card">
         <div>
-            <div class="proto-title">📱 TUIC v5 (UDP 9443)</div>
+            <div class="proto-title">📱 Fortress-TUIC5 (UDP 9443)</div>
             <div class="proto-desc">Transport: UDP · RFC 9000 QUIC + BBR · 0-RTT handshake delay for instant reconnection. Best for mobile roaming (Wi-Fi ↔ 5G).</div>
         </div>
         <button class="btn btn-sec" onclick="copyText('{{TUIC}}', 'TUIC v5 Link copied!')">Copy Link</button>
     </div>
     <div class="proto-card">
         <div>
-            <div class="proto-title">🔒 Shadowsocks-2022 (TCP/UDP 10443)</div>
+            <div class="proto-title">🔒 Fortress-Shadowsocks2022 (TCP/UDP 10443)</div>
             <div class="proto-desc">Transport: TCP/UDP · 2022-blake3-aes-256-gcm · AEAD with variable-length packet padding. Minimal battery consumption on laptops/phones.</div>
         </div>
         <button class="btn btn-sec" onclick="copyText('{{SS}}', 'Shadowsocks Link copied!')">Copy Link</button>
     </div>
     <div class="proto-card">
         <div>
-            <div class="proto-title">🌐 WireGuard over TCP (TCP 8080)</div>
-            <div class="proto-desc">Transport: TCP · TLS 1.3 WebSockets (wstunnel) · Wraps WireGuard inside HTTPS WebSockets for TCP-only environments.</div>
-        </div>
-        <button class="btn btn-sec" onclick="copyText('{{WG_TCP}}', 'WireGuard over TCP Link copied!')">Copy Link</button>
-    </div>
-    <div class="proto-card">
-        <div>
-            <div class="proto-title">⚡ Native WireGuard (UDP 51820)</div>
+            <div class="proto-title">⚡ Fortress-WireGuard-Native (UDP 51820)</div>
             <div class="proto-desc">Transport: UDP · ChaCha20-Poly1305 (Kernel) · Direct Linux kernel line-rate processing. Ultra-low overhead for high-speed LAN.</div>
         </div>
         <button class="btn btn-sec" onclick="copyText('{{WG_NATIVE}}', 'Native WireGuard Link copied!')">Copy Link</button>
+    </div>
+    <div class="proto-card">
+        <div>
+            <div class="proto-title">🌐 Fortress-WireGuard-TCP (wstunnel 8080) <span style="background:rgba(234,179,8,0.2);color:#facc15;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;">Desktop / CLI Only</span></div>
+            <div class="proto-desc">Transport: TCP · TLS 1.3 WebSockets (wstunnel) · Wraps WireGuard inside HTTPS WebSockets. Requires local wstunnel binary (start-wstunnel.bat); not included in mobile Hiddify JSON profile.</div>
+        </div>
+        <button class="btn btn-sec" onclick="copyText('{{WG_TCP}}', 'WireGuard over TCP Link copied!')">Copy Link</button>
     </div>
 </div>
         <footer style="margin-top: 40px; padding: 24px 0 12px 0; border-top: 1px solid #1e293b; text-align: center; font-size: 11px; color: #64748b; line-height: 1.8;">
@@ -681,7 +681,7 @@ def get_protocol_links():
     vless = f"vless://{UUID}@{SERVER_IP}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni={REALITY_SNI}&fp=chrome&pbk={REALITY_PUBKEY}&sid={REALITY_SHORTID}&type=tcp&headerType=none#Fortress-Reality-TCP"
     hy2_sal = f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:9444?sni={domain_target}&alpn=h3&obfs=salamander&obfs-password={SALAMANDER_PASSWORD}{pin_param}#Fortress-Hysteria2-Salamander"
     hy2_std = f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:8443?sni={domain_target}&alpn=h3{pin_param}#Fortress-Hysteria2-Standard"
-    tuic = f"tuic://{UUID}:{HY2_PASSWORD}@{SERVER_IP}:9443?congestion_control=bbr&alpn=h3&sni={domain_target}{pin_param}#Fortress-TUIC5-UDP"
+    tuic = f"tuic://{UUID}:{HY2_PASSWORD}@{SERVER_IP}:9443?congestion_control=bbr&alpn=h3&sni={domain_target}{pin_param}#Fortress-TUIC5"
     ss = f"ss://MjAyMi1ibGFrZTMtYWVzLTI1Ni1nY206{SS_PASSWORD}@{SERVER_IP}:10443#Fortress-Shadowsocks2022"
     wg_native = f"wg://{SERVER_IP}:51820?publickey={urllib.parse.quote(WG_SERVER_PUB)}&privkey={urllib.parse.quote(WG_CLIENT_PRIV)}&address={WG_CLIENT_IP}%2F32&dns=1.1.1.1#Fortress-WireGuard-Native"
     wg_tcp = f"wstunnel://{SERVER_IP}:{WSTUNNEL_PORT}?sni={domain_target}&prefix=&tunnel=127.0.0.1:51820#Fortress-WireGuard-TCP"
@@ -698,7 +698,7 @@ def get_singbox_json_config(mode="full"):
     - mode="full": Tunnel-Encrypted DNS + Full IP Proxy
     - mode="traffic-only": Direct DNS (YogaDNS / NextDNS / Chrome Secure DNS coexistence) + Web Proxy
     """
-    is_traffic_only = (mode.lower() in ["traffic-only", "split", "direct-dns", "yogadns"])
+    is_traffic_only = (mode.lower() in ["traffic-only", "traffic_only", "traffic", "split", "direct-dns", "direct_dns", "direct", "trafficonly", "yogadns"])
     ca_pem = None
     for cadir in [RAM_DIR, DISK_DIR]:
         for fname in ["ca.crt", "cert.pem"]:
@@ -716,15 +716,15 @@ def get_singbox_json_config(mode="full"):
             break
 
     stealth_outbounds = [
-        "Fortress-Reality-TCP [TLS Masking & Edge SNI]",
-        "Fortress-Hysteria2-Salamander [Scrambled QUIC Obfuscation]",
-        "Fortress-Hysteria2-Standard [BBR Congestion Control]",
-        "Fortress-TUIC5 [0-RTT Fast Mobile Roaming]",
-        "Fortress-Shadowsocks2022 [Ultra-Low Battery AEAD]"
+        "Fortress-Reality-TCP",
+        "Fortress-Hysteria2-Salamander",
+        "Fortress-Hysteria2-Standard",
+        "Fortress-TUIC5",
+        "Fortress-Shadowsocks2022"
     ]
     all_outbounds = list(stealth_outbounds)
     if WG_SERVER_PUB and not WG_SERVER_PUB.startswith("<"):
-        all_outbounds.append("Fortress-WireGuard-Native [Direct Kernel Line-Rate]")
+        all_outbounds.append("Fortress-WireGuard-Native")
 
     nextdns_id = CONFIG.get("nextdns_id", "").strip()
     remote_dns_addr = f"https://dns.nextdns.io/{nextdns_id}" if (nextdns_id and not nextdns_id.startswith("<")) else "https://1.1.1.1/dns-query"
@@ -770,25 +770,24 @@ def get_singbox_json_config(mode="full"):
         dns_config = {
             "servers": [
                 {
+                    "tag": "dns-remote",
+                    "address": remote_dns_addr,
+                    "detour": "proxy"
+                },
+                {
                     "tag": "dns-direct",
                     "address": "local",
                     "detour": "direct"
-                },
-                {
-                    "tag": "dns-remote",
-                    "address": "tcp://127.0.0.1:5335",
-                    "detour": "proxy"
-                },
-                {
-                    "tag": "dns-remote-wg",
-                    "address": "udp://10.8.0.1:5335",
-                    "detour": "proxy"
                 }
             ],
             "rules": [
                 {
                     "domain": [
-                        CAMPUS_DOMAIN
+                        CAMPUS_DOMAIN,
+                        "dns.nextdns.io",
+                        "cloudflare-dns.com",
+                        "one.one.one.one",
+                        "dns.google"
                     ],
                     "domain_suffix": [
                         CAMPUS_DOMAIN,
@@ -796,13 +795,12 @@ def get_singbox_json_config(mode="full"):
                         "local",
                         ".local",
                         "internal",
-                        ".internal"
+                        ".internal",
+                        ".nextdns.io",
+                        ".cloudflare-dns.com",
+                        ".dns.google"
                     ],
                     "server": "dns-direct"
-                },
-                {
-                    "outbound": "any",
-                    "server": "dns-remote"
                 }
             ],
             "strategy": "prefer_ipv4"
@@ -870,7 +868,7 @@ def get_singbox_json_config(mode="full"):
             },
             {
                 "type": "vless",
-                "tag": "Fortress-Reality-TCP [TLS Masking & Edge SNI]",
+                "tag": "Fortress-Reality-TCP",
                 "server": SERVER_IP,
                 "server_port": 443,
                 "uuid": UUID,
@@ -891,7 +889,7 @@ def get_singbox_json_config(mode="full"):
             },
             {
                 "type": "hysteria2",
-                "tag": "Fortress-Hysteria2-Salamander [Scrambled QUIC Obfuscation]",
+                "tag": "Fortress-Hysteria2-Salamander",
                 "server": SERVER_IP,
                 "server_port": 9444,
                 "password": HY2_PASSWORD,
@@ -903,7 +901,7 @@ def get_singbox_json_config(mode="full"):
             },
             {
                 "type": "hysteria2",
-                "tag": "Fortress-Hysteria2-Standard [BBR Congestion Control]",
+                "tag": "Fortress-Hysteria2-Standard",
                 "server": SERVER_IP,
                 "server_port": 8443,
                 "password": HY2_PASSWORD,
@@ -911,7 +909,7 @@ def get_singbox_json_config(mode="full"):
             },
             {
                 "type": "tuic",
-                "tag": "Fortress-TUIC5 [0-RTT Fast Mobile Roaming]",
+                "tag": "Fortress-TUIC5",
                 "server": SERVER_IP,
                 "server_port": 9443,
                 "uuid": UUID,
@@ -921,7 +919,7 @@ def get_singbox_json_config(mode="full"):
             },
             {
                 "type": "shadowsocks",
-                "tag": "Fortress-Shadowsocks2022 [Ultra-Low Battery AEAD]",
+                "tag": "Fortress-Shadowsocks2022",
                 "server": SERVER_IP,
                 "server_port": 10443,
                 "method": "2022-blake3-aes-256-gcm",
@@ -933,7 +931,7 @@ def get_singbox_json_config(mode="full"):
     if WG_SERVER_PUB and not WG_SERVER_PUB.startswith("<"):
         cfg["outbounds"].append({
             "type": "wireguard",
-            "tag": "Fortress-WireGuard-Native [Direct Kernel Line-Rate]",
+            "tag": "Fortress-WireGuard-Native",
             "local_address": [f"{WG_CLIENT_IP}/32"],
             "private_key": WG_CLIENT_PRIV,
             "peers": [
@@ -1570,8 +1568,8 @@ class FortressSubHandler(BaseHTTPRequestHandler):
             # Default: Full Sing-box 1.11+ JSON
             config_obj = get_singbox_json_config(mode=mode)
             body = json.dumps(config_obj, indent=2).encode("utf-8")
-            is_traffic_mode = (mode.lower() in ["traffic-only", "split", "direct-dns", "yogadns"])
-            profile_title = "Sovereign Fortress (Traffic-Only)" if is_traffic_mode else "Sovereign Fortress (Full Tunnel)"
+            is_traffic_mode = (mode.lower() in ["traffic-only", "traffic_only", "traffic", "split", "direct-dns", "direct_dns", "direct", "trafficonly", "yogadns"])
+            profile_title = "Sovereign-Fortress-(Traffic-Only)" if is_traffic_mode else "Sovereign-Fortress-(Full-Tunnel)"
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")

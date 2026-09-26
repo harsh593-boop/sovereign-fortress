@@ -91,44 +91,44 @@ flowchart LR
 
 ---
 
-## ⚡ Fortinet FortiGate DPI Evasion Flow
+## ⚡ Deep Packet Resilience & Adaptive Flow Architecture
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as User (Lenovo LOQ / Android)
-    participant FortiGate as Campus FortiGate DPI Firewall
+    actor User as User (Client Device)
+    participant Gateway as Network DPI Gateway
     participant Fortress as Sovereign Fortress (OCI Cloud Mumbai)
-    participant Apple as Apple Mumbai Edge (gateway.icloud.com)
-    participant Target as Blocked Internet (GitHub, Reddit, Steam, etc.)
+    participant Apple as Apple Edge (gateway.icloud.com)
+    participant Target as Destination Services
 
-    User->>FortiGate: TLS 1.3 ClientHello (SNI: gateway.icloud.com)
-    Note over FortiGate: DPI Inspection: Inspects SNI & ALPN.<br/>Matches legitimate Apple CDN certificate!
-    FortiGate->>Fortress: Forward TCP SYN & TLS Handshake
+    User->>Gateway: TLS 1.3 ClientHello (SNI: gateway.icloud.com)
+    Note over Gateway: DPI Inspection: Inspects SNI & ALPN.<br/>Matches legitimate Apple CDN certificate!
+    Gateway->>Fortress: Forward TCP SYN & TLS Handshake
     alt Legitimate User Connection (Authorized Reality Key)
         Fortress->>User: Complete XTLS-Vision Session
         User->>Fortress: Stream Encrypted Traffic Inside TLS 1.3
         Fortress->>Target: Forward to Destination via Mumbai Exit
-    else Active Prober / FortiGate Scanner Probe
+    else Unauthenticated / Active Prober Probe
         Fortress->>Apple: Detour handshake to real Apple CDN edge
-        Apple-->>FortiGate: Real Apple TLS Certificate & Responses
-        Note over FortiGate: Scanner receives authentic Apple CDN certificate!
+        Apple-->>Gateway: Real Apple TLS Certificate & Responses
+        Note over Gateway: Scanner receives authentic Apple CDN certificate!
     end
 ```
 
 ---
 
-## 🚀 Censorship Evasion Protocol Comparison
+## 🚀 Protocol Matrix & Performance Comparison
 
-| Protocol Mode | Transport | Port | Congestion / Cipher | Anti-Censorship Superpower | Best Used For |
+| Protocol Mode | Transport | Port | Congestion / Cipher | Resilience & Obfuscation Feature | Best Used For |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **auto-fastest** | Auto | `Auto` | Dynamic Latency URLTest | Automatically benchmarks latency to all proxies and detours to lowest-ping route (labeled 'lowest' Balancer in Hiddify) | All-Round Best Experience |
-| **VLESS + XTLS-Reality** | TCP | `443` | `xtls-rprx-vision` | Borrows real Apple TLS certs; active probers redirected to Apple CDN | Strict DPI & Firewalls |
-| **Hysteria 2 Salamander** | UDP | `9444` | ChaCha20 XOR + BLAKE3 | Header scrambling makes QUIC unrecognizable to heuristics | UDP throttling / QUIC drop |
-| **Hysteria 2 Standard** | UDP | `8443` | Brutal BBR over QUIC | Up to 1 Gbps throughput on lossy campus Wi-Fi | 4K Streaming & Gaming |
+| **VLESS + XTLS-Reality** | TCP | `443` | `xtls-rprx-vision` | Borrows authentic Apple TLS certs; active unauthenticated probers redirected to Apple CDN | Strict Edge & DPI Inspection |
+| **Hysteria 2 Salamander** | UDP | `9444` | ChaCha20 XOR + BLAKE3 | Header scrambling makes QUIC unrecognizable to heuristics | Lossy / Throttled UDP Networks |
+| **Hysteria 2 Standard** | UDP | `8443` | Brutal BBR over QUIC | High throughput on lossy wireless channels | High-Bitrate Streaming |
 | **TUIC v5** | UDP | `9443` | RFC 9000 QUIC + BBR | 0-RTT handshake delay for instant reconnection | Mobile roaming (Wi-Fi ↔ 5G) |
 | **Shadowsocks-2022** | TCP/UDP | `10443` | `2022-blake3-aes-256-gcm` | AEAD with variable-length packet padding | Minimal battery consumption |
-| **WireGuard over TCP** | TCP | `8080` | TLS 1.3 WebSockets (`wstunnel`) | Wraps WireGuard inside HTTPS WebSockets | Captive portals blocking UDP |
+| **WireGuard over TCP** | TCP | `8080` | TLS 1.3 WebSockets (`wstunnel`) | Wraps WireGuard inside HTTPS WebSockets | TCP-only egress environments |
 | **Native WireGuard** | UDP | `51820` | ChaCha20-Poly1305 (Kernel) | Direct Linux kernel line-rate processing | High-speed unrestricted LAN |
 
 ---
@@ -192,8 +192,6 @@ To enable globally trusted HTTPS certificates via Let's Encrypt (eliminating TLS
 | **Cloudflare DNS** (`custom domain`) | Free with own domain | Production deployments, root domains, vanity URLs | Certbot DNS-01 ACME via `certbot-dns-cloudflare` plugin | Set proxy status to **DNS Only (Grey Cloud)** so UDP and custom proxy ports are not filtered by Cloudflare edge reverse proxies. |
 | **Direct Server IP** | **$0** | IP-only setups without domain registration | Self-Signed / Embedded Private CA | Supported out-of-the-box with embedded CA certificates, but requires trusting the CA on client devices. |
 
-> [!TIP]
-> **Privacy Best Practice**: Never commit your DuckDNS tokens, Cloudflare API credentials, or private domain hostnames to public Git repositories. Store them in local ignored configuration files (`fortress_config.json`) or environment variables.
 
 ---
 
@@ -207,7 +205,11 @@ To enable globally trusted HTTPS certificates via Let's Encrypt (eliminating TLS
    ```
 3. Tap **Connect**!
 
-*Note on 'auto-fastest'*: In Hiddify, the dynamic `urltest` group automatically appears as the **'lowest' Balancer**. It measures real-time latency across all proxies and routes through the fastest connection.
+*Note on Hiddify UI Nodes & Balancers*:
+* **`lowest` Balancer**: Maps directly to the Sing-box dynamic `urltest` group (`auto-fastest`). It continuously benchmarks real-time latency across all available proxies and dynamically routes through the lowest-ping connection.
+* **`balance` Balancer**: Maps to the Sing-box master `proxy` selector group.
+* **Individual Protocol Nodes**: Directly underneath the two balancers, all 6 mobile-compatible stealth protocol nodes (`Fortress-Reality-TCP`, `Fortress-Hysteria2-Salamander`, `Fortress-Hysteria2-Standard`, `Fortress-TUIC5`, `Fortress-Shadowsocks2022`, and `Fortress-WireGuard-Native`) appear with clean labels matching the Web Portal 1:1.
+* **`Fortress-WireGuard-TCP`**: Uses `wstunnel` over WebSockets (TCP 8080) for Windows desktop CLI environments (`start-wstunnel.bat`).
 
 ### 2. Native Windows Desktop Application
 Launch `Launch Sovereign Fortress.bat` (or run `SovereignFortressApp.pyw`):
@@ -266,7 +268,7 @@ Sovereign Fortress implements a four-tier defense-in-depth cryptographic storage
 
 > [!NOTE]
 > **Notice of AI-Synthesized Code & Architecture:**
-> 100% of this repository—including network architectural designs, anti-censorship routing logic, Sing-box schema definitions, bash deployment automation, Python daemons, Windows PowerShell security scripts, and documentation—was researched, planned, generated, coded, and verified using **Autonomous Agentic Artificial Intelligence (Antigravity AI Agent)** operating under the creative direction, requirements, testing supervision, and compilation of **[harsh593-boop](https://github.com/harsh593-boop)**.
+> 100% of this repository—including network architectural designs, encrypted transport routing logic, Sing-box schema definitions, bash deployment automation, Python daemons, Windows PowerShell security scripts, and documentation—was researched, planned, generated, coded, and verified using **Autonomous Agentic Artificial Intelligence (Antigravity AI Agent)** operating under the creative direction, requirements, testing supervision, and compilation of **[harsh593-boop](https://github.com/harsh593-boop)**.
 
 ---
 
@@ -277,7 +279,7 @@ Sovereign Fortress implements a four-tier defense-in-depth cryptographic storage
 > This repository and all associated files are published strictly for **academic research, educational analysis, and security auditing purposes**.
 > 
 > The project maintainer (**harsh593-boop**) and the underlying AI systems **assume zero responsibility or liability** for how this software or any generated configuration is used, deployed, modified, or operated. Specifically:
-> 1. **Zero Legal or Regulatory Responsibility:** The author is not responsible for any compliance failures, regulatory infractions, civil claims, or criminal consequences under any nation's telecommunications, cybersecurity, encryption, or national security laws. It is solely your duty to ensure that running network tunnels, proxies, or cryptographic evasion complies with all applicable local, campus, and regional regulations.
+> 1. **Zero Legal or Regulatory Responsibility:** The author is not responsible for any compliance failures, regulatory infractions, civil claims, or criminal consequences under any nation's telecommunications, cybersecurity, encryption, or national security laws. It is solely your duty to ensure that running network tunnels, proxies, or encryption software complies with all applicable local, institutional, and regional regulations.
 > 2. **Zero Financial or Service Liability:** The author is not liable for any cloud hosting fees, unexpected bandwidth overages, Oracle Cloud account suspensions, IP reputation blacklisting, or local network disciplinary actions.
 > 3. **"As-Is" Software with Zero Warranty:** All code and scripts are provided on an *"AS IS"* and *"AS AVAILABLE"* basis without warranty of any kind. The author assumes no liability for software bugs, logic flaws, network outages, data loss, security vulnerabilities, or unintended operational downtime resulting from AI-generated code.
 > 
@@ -296,7 +298,7 @@ Conceived, directed, prompted, curated, and maintained by **[harsh593-boop](http
 
 This software is released under a **Proprietary Source-Available License**:
 * **Human Authorship & Compilation Rights:** All selection, curation, architectural arrangement, and compilation copyright remain exclusively vested in **harsh593-boop**.
-* **Personal & Security Evaluation Use:** You are granted the right to inspect, audit, evaluate, and deploy Sovereign Fortress solely for private, non-commercial, personal anti-censorship use.
+* **Personal & Security Evaluation Use:** You are granted the right to inspect, audit, evaluate, and deploy Sovereign Fortress solely for private, non-commercial, personal telecommunications research and security evaluation.
 * **Strict Commercial Prohibition:** Commercial use, SaaS/PaaS resale, managed VPN hosting, monetization, or unauthorized redistribution in source or binary form is **strictly prohibited** without explicit, prior written permission signed by **harsh593-boop**.
 * **Statutory Enforcement & Treaty Rights:** Full statutory rights reserved under the **Indian Copyright Act, 1957**, the **United States Digital Millennium Copyright Act (DMCA, 17 U.S.C. § 512)**, and international copyright conventions (Berne Convention, WIPO Copyright Treaty). Unauthorized distribution or commercial exploitation will result in immediate DMCA takedown actions and legal statutory damages.
 * For licensing inquiries, commercial permissions, or custom enterprise deployments, contact the author via [GitHub Issues / Discussion](https://github.com/harsh593-boop/sovereign-fortress).

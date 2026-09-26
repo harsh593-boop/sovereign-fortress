@@ -19,7 +19,7 @@ Under international copyright law (including the **Berne Convention for the Prot
 ## 2. Permitted and Prohibited Uses
 
 ### Permitted:
-* **Personal Anti-Censorship Use:** You may clone, build, and deploy this software for your own individual, personal, non-commercial bypass of censorship.
+* **Personal Research & Privacy Evaluation:** You may clone, build, and deploy this software for your own individual, personal, non-commercial research and privacy evaluation.
 * **Educational & Security Research:** Academic study, code auditing, and non-commercial security evaluation are permitted.
 
 ### Strictly Prohibited:
