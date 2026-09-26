@@ -37,13 +37,13 @@ SERVER_IP=$(curl -s4 https://api.ipify.org || curl -s4 https://ifconfig.me || ip
 echo "[+] Detected Server Public IP: $SERVER_IP"
 
 # 1. Install Essential Dependencies & Security Tools
-echo "[*] Installing system dependencies, security tools, and Unbound DNS..."
+echo "[*] Installing system dependencies and security tools..."
 echo iptables-persistent iptables-persistent/autosave_v4 boolean true | debconf-set-selections 2>/dev/null || true
 echo iptables-persistent iptables-persistent/autosave_v6 boolean true | debconf-set-selections 2>/dev/null || true
 apt-get update -y
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
     curl wget unzip tar iptables iptables-persistent netfilter-persistent ufw libpam-google-authenticator \
-    qrencode jq openssl python3 unbound dnsutils bsdmainutils fail2ban wireguard-tools
+    qrencode jq openssl python3 dnsutils bsdmainutils fail2ban wireguard-tools
 
 # 2. Setup Dedicated System User (Principle of Least Privilege)
 FORTRESS_USER="fortress"
@@ -212,73 +212,148 @@ chown -R "$FORTRESS_USER:$FORTRESS_USER" "$RAM_DIR"
 CERT_SHA256=$(openssl x509 -noout -fingerprint -sha256 -in "$RAM_DIR/cert.pem" | cut -d= -f2 | tr -d ':')
 PIN_SHA256=$(openssl x509 -in "$RAM_DIR/cert.pem" -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | openssl enc -base64)
 
-# 8. Configure Self-Hosted Recursive Zero-Log Unbound DNS
-echo "[*] Configuring Unbound recursive DNS resolver on 127.0.0.1:5335..."
-curl -sS -o /var/lib/unbound/root.hints https://www.internic.net/domain/named.root || true
+# 8. Configure Self-Hosted Sovereign Zero-Log Encrypted AdGuard Home DNS Engine
+echo "[*] Configuring AdGuard Home zero-log encrypted DNS resolver on 127.0.0.1:5335 & 10.8.0.1:5335..."
+AGH_URL="https://github.com/AdguardTeam/AdGuardHome/releases/download/v0.107.56/AdGuardHome_linux_${SB_ARCH}.tar.gz"
+mkdir -p /opt/AdGuardHome /opt/AdGuardHome/data "${RAM_DIR}/adguard"
+curl -fsSL --connect-timeout 10 -o /tmp/agh.tar.gz "$AGH_URL"
+tar -xzf /tmp/agh.tar.gz -C /tmp/
+cp -f /tmp/AdGuardHome/AdGuardHome /opt/AdGuardHome/AdGuardHome
+chmod 755 /opt/AdGuardHome/AdGuardHome
+rm -rf /tmp/AdGuardHome /tmp/agh.tar.gz
 
-cat <<EOF > /etc/unbound/unbound.conf.d/fortress-unbound.conf
-server:
-    verbosity: 0
-    use-syslog: no
-    log-queries: no
-    log-replies: no
-    interface: 127.0.0.1
-    interface: 10.8.0.1
-    port: 5335
-    do-ip4: yes
-    do-ip6: no
-    do-udp: yes
-    do-tcp: yes
-    access-control: 127.0.0.0/8 allow
-    access-control: 10.8.0.0/24 allow
-    hide-identity: yes
-    hide-version: yes
-    harden-glue: yes
-    harden-dnssec-stripped: yes
-    use-caps-for-id: no
-    qname-minimisation: yes
-    prefetch: yes
-    num-threads: 2
-    msg-cache-size: 32m
-    rrset-cache-size: 64m
-    tls-cert-bundle: "/etc/ssl/certs/ca-certificates.crt"
-EOF
+chattr -i /opt/AdGuardHome/AdGuardHome.yaml 2>/dev/null || true
 
 NEXTDNS_ID=$(grep -Po '"nextdns_id":\s*"\K[^"]*' "$DISK_DIR/fortress_config.json" 2>/dev/null || echo "")
-
+UPSTREAM_NEXTDNS=""
 if [ -n "$NEXTDNS_ID" ] && [ "$NEXTDNS_ID" != "<YOUR_NEXTDNS_ID>" ]; then
-    cat <<EOF >> /etc/unbound/unbound.conf.d/fortress-unbound.conf
-
-forward-zone:
-    name: "."
-    forward-tls-upstream: yes
-    forward-addr: 45.90.28.0#${NEXTDNS_ID}.dns.nextdns.io
-    forward-addr: 45.90.30.0#${NEXTDNS_ID}.dns.nextdns.io
-    forward-addr: 1.1.1.1@853#cloudflare-dns.com
-    forward-addr: 9.9.9.9@853#dns.quad9.net
-EOF
-else
-    cat <<EOF >> /etc/unbound/unbound.conf.d/fortress-unbound.conf
-
-forward-zone:
-    name: "."
-    forward-tls-upstream: yes
-    forward-addr: 1.1.1.1@853#cloudflare-dns.com
-    forward-addr: 1.0.0.1@853#cloudflare-dns.com
-    forward-addr: 9.9.9.9@853#dns.quad9.net
-EOF
+    UPSTREAM_NEXTDNS="    - tls://${NEXTDNS_ID}.dns.nextdns.io"
 fi
 
-systemctl restart unbound
-systemctl enable unbound
-echo "[+] Unbound Recursive DNS running on 127.0.0.1:5335 & 10.8.0.1:5335 (DNS-over-TLS Upstream, Zero Logging)."
+cat <<EOF > /opt/AdGuardHome/AdGuardHome.yaml
+schema_version: 29
+bind_host: 127.0.0.1
+bind_port: 3000
+auth_attempts: 5
+block_auth_min: 15
+http_proxy: ""
+language: en
+theme: auto
+dns:
+  bind_hosts:
+    - 127.0.0.1
+    - 10.8.0.1
+  port: 5335
+  statistics_interval: 0
+  querylog_enabled: false
+  querylog_file_enabled: false
+  querylog_interval: 0
+  querylog_size_memory: 0
+  anonymize_client_ip: true
+  protection_enabled: true
+  blocking_mode: default
+  blocking_ipv4: ""
+  blocking_ipv6: ""
+  blocked_response_ttl: 10
+  parental_block_host: parental-block.adguard.org
+  safebrowsing_block_host: standard-block.adguard.org
+  ratelimit: 0
+  ratelimit_subnet_len_ipv4: 24
+  ratelimit_subnet_len_ipv6: 56
+  ratelimit_whitelist: []
+  refuse_any: true
+  upstream_dns:
+${UPSTREAM_NEXTDNS}
+    - tls://dns.quad9.net
+    - https://dns.quad9.net/dns-query
+    - tls://one.one.one.one
+    - tls://dns.cloudflare.com
+  upstream_dns_file: ""
+  bootstrap_dns:
+    - 9.9.9.9
+    - 1.1.1.1
+  all_servers: false
+  fastest_addr: true
+  fastest_timeout: 1s
+  allowed_clients: []
+  disallowed_clients: []
+  blocked_hosts:
+    - version.bind
+    - id.server
+    - hostname.bind
+  trusted_proxies:
+    - 127.0.0.0/8
+    - 10.8.0.0/24
+  cache_size: 67108864
+  cache_ttl_min: 300
+  cache_ttl_max: 86400
+  cache_optimistic: true
+  edns_client_subnet:
+    custom_ip: ""
+    enabled: false
+    use_custom: false
+  max_goroutines: 300
+  handle_ddr: true
+tls:
+  enabled: true
+  server_name: "${DOMAIN}"
+  force_https: false
+  port_https: 0
+  port_dns_over_tls: 853
+  port_dns_over_quic: 853
+  certificate_path: "${RAM_DIR}/cert.pem"
+  private_key_path: "${RAM_DIR}/key.pem"
+filters:
+  - enabled: true
+    url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt
+    name: AdGuard DNS filter
+    id: 1
+  - enabled: true
+    url: https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/pro.txt
+    name: HaGeZi Multi PRO
+    id: 2
+EOF
+
+chown -R ${FORTRESS_USER}:${FORTRESS_USER} /opt/AdGuardHome "${RAM_DIR}/adguard"
+
+cat <<EOF > /etc/systemd/system/adguard-home.service
+[Unit]
+Description=AdGuard Home: Sovereign Zero-Log Encrypted DNS Engine
+After=network.target
+
+[Service]
+Type=simple
+User=${FORTRESS_USER}
+Group=${FORTRESS_USER}
+WorkingDirectory=/opt/AdGuardHome
+ExecStart=/opt/AdGuardHome/AdGuardHome -c /opt/AdGuardHome/AdGuardHome.yaml -w /opt/AdGuardHome
+Restart=always
+RestartSec=3
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+LimitNOFILE=65535
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/AdGuardHome ${RAM_DIR}
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl stop unbound 2>/dev/null || true
+systemctl disable unbound 2>/dev/null || true
+systemctl enable adguard-home
+systemctl restart adguard-home
+chattr +i /opt/AdGuardHome/AdGuardHome.yaml 2>/dev/null || true
+echo "[+] AdGuard Home DNS running on 127.0.0.1:5335 & 10.8.0.1:5335 (DoT/DoQ, Zero Logging, Immutable Config)."
 
 # 9. Generate Hardened Sing-box Configuration (IPv4-bound, Zero-Leak)
 echo "[*] Generating Sing-box core configuration in RAM..."
 SERVER_DNS_JSON='{
     "servers": [
       {
-        "tag": "sovereign-unbound",
+        "tag": "sovereign-adguard",
         "address": "127.0.0.1:5335",
         "detour": "direct"
       }
@@ -286,7 +361,7 @@ SERVER_DNS_JSON='{
     "rules": [
       {
         "outbound": "any",
-        "server": "sovereign-unbound"
+        "server": "sovereign-adguard"
       }
     ],
     "strategy": "prefer_ipv4"
@@ -425,8 +500,8 @@ chown -R "$FORTRESS_USER:$FORTRESS_USER" "$RAM_DIR"
 cat <<EOF > /etc/systemd/system/fortress-core.service
 [Unit]
 Description=Sovereign Fortress Core Multi-Protocol Engine (Sing-box)
-After=network.target network-online.target unbound.service
-Wants=unbound.service
+After=network.target network-online.target adguard-home.service
+Wants=adguard-home.service
 
 [Service]
 Type=simple
@@ -772,7 +847,7 @@ echo "[+] WireGuard-over-TCP: TCP 8080 (wstunnel TLS 1.3)"
 echo "[+] Universal Sub (HTTPS): https://${SERVER_IP}:8443/sub/${SUB_TOKEN}"
 echo "[+] Traffic-Only Sub:     https://${SERVER_IP}:8443/sub/${SUB_TOKEN}?mode=traffic-only"
 echo "[+] Web Portal (HTTPS):   https://${SERVER_IP}:8443/portal"
-echo "[+] Recursive DNS:      127.0.0.1:5335 (Unbound Zero-Log Root Hints)"
+echo "[+] Recursive DNS:      127.0.0.1:5335 & 10.8.0.1:5335 (AdGuard Home Zero-Log DoT/DoQ Engine)"
 echo "[+] Master Token:       ${SUB_TOKEN}"
 if [ -n "${TOTP_SECRET_VAL}" ]; then
     echo "[+] 2FA Secret Key:     ${TOTP_SECRET_VAL}"

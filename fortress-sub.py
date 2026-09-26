@@ -722,6 +722,8 @@ def get_singbox_json_config(mode="full"):
         "Fortress-TUIC5",
         "Fortress-Shadowsocks2022"
     ]
+    # Keep auto-balancer strictly to stealth protocols to prevent campus UDP 51820 blockage,
+    # but include WireGuard Native in selector as manual fallback for unrestrictive networks
     all_outbounds = list(stealth_outbounds)
     if WG_SERVER_PUB and not WG_SERVER_PUB.startswith("<"):
         all_outbounds.append("Fortress-WireGuard-Native")
@@ -932,8 +934,51 @@ def get_singbox_json_config(mode="full"):
 
     rules = []
     if is_traffic_only:
+        rules.append({
+            "process_name": [
+                "YogaDNS.exe", "yogadns.exe", "YogaDNS",
+                "NextDNS.exe", "nextdns.exe",
+                "dnscrypt-proxy.exe", "dnscrypt-proxy",
+                "stubby.exe", "stubby",
+                "cloudflared.exe", "cloudflared"
+            ],
+            "outbound": "direct"
+        })
         rules.append({"protocol": "dns", "outbound": "direct"})
-        rules.append({"port": [53, 853], "outbound": "direct"})
+        rules.append({"port": [53, 853, 5353], "outbound": "direct"})
+        rules.append({
+            "domain": [
+                "dns.nextdns.io",
+                "cloudflare-dns.com",
+                "one.one.one.one",
+                "dns.google",
+                "dns.quad9.net",
+                "dns9.quad9.net",
+                "dns.adguard-dns.com",
+                "dns.adguard.com",
+                "doh.controld.com",
+                "dns.controld.com",
+                "doh.cleanbrowsing.org",
+                "doh.opendns.com"
+            ],
+            "domain_suffix": [
+                ".nextdns.io",
+                ".cloudflare-dns.com",
+                ".dns.google",
+                ".quad9.net",
+                ".adguard-dns.com",
+                ".adguard.com",
+                ".controld.com",
+                ".opendns.com",
+                ".cleanbrowsing.org",
+                ".mullvad.net",
+                ".ahadns.net",
+                ".dnswarden.com",
+                ".libredns.gr",
+                ".dnscrypt.info"
+            ],
+            "outbound": "direct"
+        })
     else:
         rules.append({"action": "hijack-dns"})
 
