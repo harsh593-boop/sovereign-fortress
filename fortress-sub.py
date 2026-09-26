@@ -677,7 +677,7 @@ def verify_session_cookie(cookie_str: str) -> bool:
 
 def get_protocol_links():
     domain_target = DOMAIN if (DOMAIN and not DOMAIN.startswith("<")) else SERVER_IP
-    pin_param = f"&pinSHA256={PIN_SHA256}" if PIN_SHA256 else ""
+    pin_param = f"&pinSHA256={PIN_SHA256}" if (PIN_SHA256 and not DOMAIN) else ""
     vless = f"vless://{UUID}@{SERVER_IP}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni={REALITY_SNI}&fp=chrome&pbk={REALITY_PUBKEY}&sid={REALITY_SHORTID}&type=tcp&headerType=none#Fortress-Reality-TCP"
     hy2_sal = f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:9444?sni={domain_target}&alpn=h3&obfs=salamander&obfs-password={SALAMANDER_PASSWORD}{pin_param}#Fortress-Hysteria2-Salamander"
     hy2_std = f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:8443?sni={domain_target}&alpn=h3{pin_param}#Fortress-Hysteria2-Standard"
@@ -745,12 +745,12 @@ def get_singbox_json_config(mode="full"):
         "server_name": domain_target,
         "alpn": ["h3"]
     }
-    if ca_pem:
-        hy2_sal_tls["certificate"] = [ca_pem]
-        hy2_std_tls["certificate"] = [ca_pem]
-        tuic_tls["certificate"] = [ca_pem]
-    else:
-        if not DOMAIN:
+    if not DOMAIN:
+        if ca_pem:
+            hy2_sal_tls["certificate"] = [ca_pem]
+            hy2_std_tls["certificate"] = [ca_pem]
+            tuic_tls["certificate"] = [ca_pem]
+        else:
             hy2_sal_tls["insecure"] = True
             hy2_std_tls["insecure"] = True
             tuic_tls["insecure"] = True
@@ -819,7 +819,19 @@ def get_singbox_json_config(mode="full"):
     if is_traffic_only:
         tun_exclude.extend([
             "45.90.28.0/24",
-            "45.90.30.0/24"
+            "45.90.30.0/24",
+            "1.1.1.1/32",
+            "1.0.0.1/32",
+            "8.8.8.8/32",
+            "8.8.4.4/32",
+            "9.9.9.9/32",
+            "149.112.112.112/32",
+            "94.140.14.14/32",
+            "94.140.15.15/32",
+            "208.67.222.222/32",
+            "208.67.220.220/32",
+            "76.76.2.0/24",
+            "76.76.10.0/24"
         ])
 
     cfg = {
@@ -944,6 +956,35 @@ def get_singbox_json_config(mode="full"):
     if is_traffic_only:
         rules.append({"protocol": "dns", "outbound": "direct"})
         rules.append({"port": [53, 853], "outbound": "direct"})
+        rules.append({
+            "domain": [
+                "dns.nextdns.io",
+                "cloudflare-dns.com",
+                "one.one.one.one",
+                "dns.google",
+                "dns.quad9.net",
+                "dns.adguard.com",
+                "doh.controld.com"
+            ],
+            "domain_suffix": [
+                ".nextdns.io",
+                ".cloudflare-dns.com",
+                ".dns.google",
+                ".quad9.net",
+                ".adguard.com",
+                ".controld.com"
+            ],
+            "ip_cidr": [
+                "1.1.1.1/32", "1.0.0.1/32",
+                "8.8.8.8/32", "8.8.4.4/32",
+                "9.9.9.9/32", "149.112.112.112/32",
+                "45.90.28.0/24", "45.90.30.0/24",
+                "94.140.14.14/32", "94.140.15.15/32",
+                "208.67.222.222/32", "208.67.220.220/32",
+                "76.76.2.0/24", "76.76.10.0/24"
+            ],
+            "outbound": "direct"
+        })
     else:
         rules.append({"action": "hijack-dns"})
 
@@ -967,21 +1008,6 @@ def get_singbox_json_config(mode="full"):
             "outbound": "direct"
         }
     ])
-
-    if is_traffic_only:
-        rules.append({
-            "domain": [
-                "dns.nextdns.io"
-            ],
-            "domain_suffix": [
-                ".nextdns.io"
-            ],
-            "ip_cidr": [
-                "45.90.28.0/24",
-                "45.90.30.0/24"
-            ],
-            "outbound": "direct"
-        })
 
     rules.extend([
         {
@@ -1256,8 +1282,8 @@ def render_dashboard_page(token, totp_secret):
     sub_full_url = f"https://{host_for_sub}:{PORT}/sub/{token}?mode=full"
     sub_traffic_url = f"https://{host_for_sub}:{PORT}/sub/{token}?mode=traffic-only"
     sub_b64_url = f"https://{host_for_sub}:{PORT}/sub/{token}/b64"
-    hiddify_full = f"hiddify://import/{sub_full_url}#Sovereign Fortress (Full Tunnel)"
-    hiddify_traffic = f"hiddify://import/{sub_traffic_url}#Sovereign Fortress (Traffic-Only)"
+    hiddify_full = f"hiddify://import/{sub_full_url}#Sovereign-Fortress-(Full-Tunnel)"
+    hiddify_traffic = f"hiddify://import/{sub_traffic_url}#Sovereign-Fortress-(Traffic-Only)"
     vless, hy2_sal, hy2_std, tuic, ss, wg_native, wg_tcp = get_protocol_links()
 
     html = DASHBOARD_HTML_TEMPLATE
@@ -1554,6 +1580,7 @@ class FortressSubHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Content-Disposition", 'inline; filename="SovereignFortress.json"')
             self.send_header("profile-title", profile_title)
+            self.send_header("Profile-Title", profile_title)
             self.send_header("profile-update-interval", "1")
             self.send_header("subscription-userinfo", "upload=0; download=0; total=10737418240000; expire=0")
             self.send_header("Connection", "close")
@@ -1562,16 +1589,8 @@ class FortressSubHandler(BaseHTTPRequestHandler):
                 self.wfile.write(body)
             return
 
-        # Unmatched GET request: Serve custom branded 404 page
-        body = render_not_found_page()
-        self.send_response(404)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Connection", "close")
-        self.end_headers()
-        if not head_only:
-            self.wfile.write(body)
+        # Unmatched / Nonexistent / Disallowed route: Strictly redirect to decoy (Microsoft)
+        self.send_redirect_to_decoy()
         return
 
     def do_POST(self):
@@ -1675,10 +1694,11 @@ class FortressSubHandler(BaseHTTPRequestHandler):
             new_token = "ft_sec_" + secrets.token_urlsafe(24)
             save_token(new_token)
             proto = "https" if (os.path.exists(os.path.join(RAM_DIR, "cert.pem")) or os.path.exists(os.path.join(DISK_DIR, "cert.pem"))) else "http"
+            target_host = DOMAIN if (DOMAIN and not DOMAIN.startswith("<")) else SERVER_IP
             res_obj = {
                 "success": True, 
                 "token": new_token,
-                "url": f"{proto}://{SERVER_IP}:{PORT}/sub/{new_token}"
+                "url": f"{proto}://{target_host}:{PORT}/sub/{new_token}"
             }
             res_body = json.dumps(res_obj).encode("utf-8")
             self.send_response(200)
