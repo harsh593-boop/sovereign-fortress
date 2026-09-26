@@ -38,9 +38,11 @@ echo "[+] Detected Server Public IP: $SERVER_IP"
 
 # 1. Install Essential Dependencies & Security Tools
 echo "[*] Installing system dependencies, security tools, and Unbound DNS..."
+echo iptables-persistent iptables-persistent/autosave_v4 boolean true | debconf-set-selections 2>/dev/null || true
+echo iptables-persistent iptables-persistent/autosave_v6 boolean true | debconf-set-selections 2>/dev/null || true
 apt-get update -y
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    curl wget unzip tar iptables ufw libpam-google-authenticator \
+    curl wget unzip tar iptables iptables-persistent netfilter-persistent ufw libpam-google-authenticator \
     qrencode jq openssl python3 unbound dnsutils bsdmainutils fail2ban wireguard-tools
 
 # 2. Setup Dedicated System User (Principle of Least Privilege)
@@ -100,7 +102,7 @@ WST_TAR="wstunnel_${WSTUNNEL_VER}_linux_${WST_ARCH}.tar.gz"
 WST_URL="https://github.com/erebe/wstunnel/releases/download/v${WSTUNNEL_VER}/${WST_TAR}"
 
 case "$WST_ARCH" in
-    amd64) EXPECTED_WST_SHA256="822e1a2f64606ddc9e782987114620577fc75e5f0e34a66a1ec13459c55b6c38" ;;
+    amd64) EXPECTED_WST_SHA256="fa842ed53fbb14b1c69cd98829f9895d7f8a6b0d562c57c1175851a52cea9ea2" ;;
     arm64) EXPECTED_WST_SHA256="99f9506d01d1b4073254609600ec5056dab8dc58aec75c32f6eb0508335a8fd2" ;;
 esac
 
@@ -221,14 +223,14 @@ server:
     log-queries: no
     log-replies: no
     interface: 127.0.0.1
+    interface: 10.8.0.1
     port: 5335
     do-ip4: yes
     do-ip6: no
     do-udp: yes
     do-tcp: yes
     access-control: 127.0.0.0/8 allow
-    auto-trust-anchor-file: "/var/lib/unbound/root.key"
-    root-hints: "/var/lib/unbound/root.hints"
+    access-control: 10.8.0.0/24 allow
     hide-identity: yes
     hide-version: yes
     harden-glue: yes
@@ -244,17 +246,44 @@ EOF
 
 systemctl restart unbound
 systemctl enable unbound
-echo "[+] Unbound Recursive DNS running on 127.0.0.1:5335 (DNSSEC Enabled, Zero Logging)."
+echo "[+] Unbound Recursive DNS running on 127.0.0.1:5335 & 10.8.0.1:5335 (DNSSEC Enabled, Zero Logging)."
 
 # 9. Generate Hardened Sing-box Configuration (IPv4-bound, Zero-Leak)
 echo "[*] Generating Sing-box core configuration in RAM..."
-cat <<EOF > "$RAM_DIR/config.json"
-{
-  "log": {
-    "level": "warn",
-    "timestamp": true
-  },
-  "dns": {
+NEXTDNS_ID=$(grep -Po '"nextdns_id":\s*"\K[^"]*' "$DISK_DIR/fortress_config.json" 2>/dev/null || echo "")
+
+if [ -n "$NEXTDNS_ID" ] && [ "$NEXTDNS_ID" != "<YOUR_NEXTDNS_ID>" ]; then
+    SERVER_DNS_JSON='{
+    "servers": [
+      {
+        "tag": "nextdns",
+        "address": "https://dns.nextdns.io/'"${NEXTDNS_ID}"'",
+        "address_resolver": "sovereign-unbound",
+        "detour": "direct",
+        "strategy": "prefer_ipv4"
+      },
+      {
+        "tag": "sovereign-unbound",
+        "address": "udp://127.0.0.1:5335",
+        "detour": "direct"
+      }
+    ],
+    "rules": [
+      {
+        "domain": [
+          "dns.nextdns.io"
+        ],
+        "server": "sovereign-unbound"
+      },
+      {
+        "outbound": "any",
+        "server": "nextdns"
+      }
+    ],
+    "strategy": "prefer_ipv4"
+  }'
+else
+    SERVER_DNS_JSON='{
     "servers": [
       {
         "tag": "sovereign-unbound",
@@ -269,7 +298,16 @@ cat <<EOF > "$RAM_DIR/config.json"
       }
     ],
     "strategy": "prefer_ipv4"
+  }'
+fi
+
+cat <<EOF > "$RAM_DIR/config.json"
+{
+  "log": {
+    "level": "warn",
+    "timestamp": true
   },
+  "dns": ${SERVER_DNS_JSON},
   "inbounds": [
     {
       "type": "vless",
@@ -504,8 +542,8 @@ cat <<EOF > "$DISK_DIR/wg0.conf"
 Address = 10.8.0.1/24
 ListenPort = 51820
 PrivateKey = ${WG_SERVER_PRIV}
-PostUp = iptables -I FORWARD 1 -m state --state RELATED,ESTABLISHED -j ACCEPT; iptables -I FORWARD 2 -i wg0 -j ACCEPT; iptables -I FORWARD 3 -o wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o ens3 -j MASQUERADE || iptables -t nat -A POSTROUTING -j MASQUERADE
-PostDown = iptables -D FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT || true; iptables -D FORWARD -i wg0 -j ACCEPT || true; iptables -D FORWARD -o wg0 -j ACCEPT || true; iptables -t nat -D POSTROUTING -o ens3 -j MASQUERADE || true
+PostUp = iptables -I FORWARD 1 -m state --state RELATED,ESTABLISHED -j ACCEPT; iptables -I FORWARD 2 -i wg0 -j ACCEPT; iptables -I FORWARD 3 -o wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o ens3 -j MASQUERADE || iptables -t nat -A POSTROUTING -j MASQUERADE; iptables -t nat -I PREROUTING 1 -i wg0 -p udp --dport 53 -j REDIRECT --to-ports 5335; iptables -t nat -I PREROUTING 2 -i wg0 -p tcp --dport 53 -j REDIRECT --to-ports 5335
+PostDown = iptables -D FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT || true; iptables -D FORWARD -i wg0 -j ACCEPT || true; iptables -D FORWARD -o wg0 -j ACCEPT || true; iptables -t nat -D POSTROUTING -o ens3 -j MASQUERADE || true; iptables -t nat -D PREROUTING -i wg0 -p udp --dport 53 -j REDIRECT --to-ports 5335 || true; iptables -t nat -D PREROUTING -i wg0 -p tcp --dport 53 -j REDIRECT --to-ports 5335 || true
 
 [Peer]
 PublicKey = ${WG_CLIENT_PUB}
@@ -656,11 +694,14 @@ echo "[*] Disabling inert UFW and configuring hardened iptables rules..."
 ufw disable >/dev/null 2>&1 || true
 systemctl disable ufw >/dev/null 2>&1 || true
 
-# Direct iptables accept rules (prevents default OCI host-prohibited drops)
-iptables -I INPUT 1 -p tcp -m multiport --dports 22,443,8080,8443,10443 -j ACCEPT 2>/dev/null || true
-iptables -I INPUT 2 -p udp -m multiport --dports 443,8443,9443,9444,10443,51820 -j ACCEPT 2>/dev/null || true
+# Explicit iptables accept rules and persistence
+iptables -I INPUT 1 -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || true
+iptables -I INPUT 2 -i lo -j ACCEPT 2>/dev/null || true
+iptables -I INPUT 3 -p tcp -m multiport --dports 22,443,8080,8443,10443 -j ACCEPT 2>/dev/null || true
+iptables -I INPUT 4 -p udp -m multiport --dports 443,8443,9443,9444,10443,51820 -j ACCEPT 2>/dev/null || true
+systemctl enable netfilter-persistent >/dev/null 2>&1 || true
 netfilter-persistent save >/dev/null 2>&1 || true
-echo "[+] Hardened iptables rules ACTIVE and saved with netfilter-persistent."
+echo "[+] Hardened iptables rules ACTIVE and persistent across reboot."
 
 # 18. Save Master Configuration Output & Client WireGuard Profiles
 TOTP_SECRET_VAL=$(head -n 1 "${AUTH_FILE}" 2>/dev/null || true)
@@ -692,7 +733,7 @@ cat <<EOF > "$RAM_DIR/fortress-wireguard.conf"
 [Interface]
 PrivateKey = ${WG_CLIENT_PRIV}
 Address = 10.8.0.2/24
-DNS = 1.1.1.1, 8.8.8.8
+DNS = 10.8.0.1
 MTU = 1360
 
 [Peer]
@@ -707,7 +748,7 @@ cat <<EOF > "$RAM_DIR/fortress-wireguard-tcp.conf"
 [Interface]
 PrivateKey = ${WG_CLIENT_PRIV}
 Address = 10.8.0.2/24
-DNS = 1.1.1.1, 8.8.8.8
+DNS = 10.8.0.1
 MTU = 1360
 
 [Peer]
@@ -747,6 +788,6 @@ if [ -n "${TOTP_SECRET_VAL}" ]; then
     echo "[+] 2FA Setup URI:      otpauth://totp/${ADMIN_USER}@${SERVER_IP}?secret=${TOTP_SECRET_VAL}&issuer=SovereignFortress"
 fi
 echo "[+] Sandboxing:         Dedicated unprivileged user 'fortress' + Systemd Strict"
-echo "[+] Firewall:           UFW Active & IPv6 Leak Drop Enforced"
+echo "[+] Firewall:           iptables & netfilter-persistent Active (Default Drop Enforced)"
 echo "[+] Master Config:      ${DISK_DIR}/fortress_config.json"
 echo "================================================================="

@@ -683,7 +683,7 @@ def get_protocol_links():
     hy2_std = f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:8443?sni={domain_target}&alpn=h3{pin_param}#Fortress-Hysteria2-Standard"
     tuic = f"tuic://{UUID}:{HY2_PASSWORD}@{SERVER_IP}:9443?congestion_control=bbr&alpn=h3&sni={domain_target}{pin_param}#Fortress-TUIC5"
     ss = f"ss://MjAyMi1ibGFrZTMtYWVzLTI1Ni1nY206{SS_PASSWORD}@{SERVER_IP}:10443#Fortress-Shadowsocks2022"
-    wg_native = f"wg://{SERVER_IP}:51820?publickey={urllib.parse.quote(WG_SERVER_PUB)}&privkey={urllib.parse.quote(WG_CLIENT_PRIV)}&address={WG_CLIENT_IP}%2F32&dns=1.1.1.1#Fortress-WireGuard-Native"
+    wg_native = f"wg://{SERVER_IP}:51820?publickey={urllib.parse.quote(WG_SERVER_PUB)}&privkey={urllib.parse.quote(WG_CLIENT_PRIV)}&address={WG_CLIENT_IP}%2F32&dns=10.8.0.1#Fortress-WireGuard-Native"
     wg_tcp = f"wstunnel://{SERVER_IP}:{WSTUNNEL_PORT}?sni={domain_target}&prefix=&tunnel=127.0.0.1:51820#Fortress-WireGuard-TCP"
     return [vless, hy2_sal, hy2_std, tuic, ss, wg_native, wg_tcp]
 
