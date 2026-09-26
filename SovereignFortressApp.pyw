@@ -45,6 +45,7 @@ CONFIG_FILE = os.path.join(APP_DIR, "fortress_config.json")
 # Fallback / Default configuration template
 CONFIG = {
     "server_ip": "<YOUR_SERVER_IP>",
+    "domain": "",
     "sub_port": 8443,
     "token": "<YOUR_SUBSCRIPTION_TOKEN>",
     "totp_secret": "",
@@ -66,15 +67,17 @@ if os.path.exists(CONFIG_FILE):
         print(f"[-] Warning: Failed to load {CONFIG_FILE}: {e}")
 
 SERVER_IP = CONFIG.get("server_ip", "<YOUR_SERVER_IP>")
+DOMAIN = CONFIG.get("domain", "")
+SUB_HOST = DOMAIN if (DOMAIN and not DOMAIN.startswith("<")) else SERVER_IP
 SUB_PORT = CONFIG.get("sub_port", 8443)
 TOKEN = CONFIG.get("token", "<YOUR_SUBSCRIPTION_TOKEN>")
-SUB_URL_HTTPS = f"https://{SERVER_IP}:{SUB_PORT}/sub/{TOKEN}"
+SUB_URL_HTTPS = f"https://{SUB_HOST}:{SUB_PORT}/sub/{TOKEN}"
 SUB_URL_HTTP = f"http://{SERVER_IP}:{SUB_PORT}/sub/{TOKEN}"
 SUB_URL = SUB_URL_HTTPS
-SUB_URL_TRAFFIC_ONLY = f"https://{SERVER_IP}:{SUB_PORT}/sub/{TOKEN}?mode=traffic-only"
+SUB_URL_TRAFFIC_ONLY = f"https://{SUB_HOST}:{SUB_PORT}/sub/{TOKEN}?mode=traffic-only"
 SUB_URL_HTTP_TRAFFIC_ONLY = f"http://{SERVER_IP}:{SUB_PORT}/sub/{TOKEN}?mode=traffic-only"
 HIDDIFY_DEEPLINK = f"hiddify://import/{SUB_URL}#SovereignFortress"
-PORTAL_URL = f"https://{SERVER_IP}:{SUB_PORT}/portal"
+PORTAL_URL = f"https://{SUB_HOST}:{SUB_PORT}/portal"
 
 UUID = CONFIG.get("uuid", "<YOUR_UUID>")
 REALITY_PUBKEY = CONFIG.get("reality_pubkey", "<YOUR_REALITY_PUBLIC_KEY>")

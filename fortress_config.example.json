@@ -1,5 +1,6 @@
 {
   "server_ip": "<YOUR_SERVER_IP>",
+  "domain": "<YOUR_DOMAIN_OPTIONAL>",
   "sub_port": 8443,
   "token": "<YOUR_SUBSCRIPTION_TOKEN>",
   "totp_secret": "<YOUR_TOTP_SECRET>",
