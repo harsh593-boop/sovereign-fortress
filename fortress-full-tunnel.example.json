@@ -50,13 +50,13 @@
       "tag": "proxy",
       "outbounds": [
         "auto-fastest",
-        "Fortress-Reality-TCP [DPI & Campus Firewall Slayer]",
-        "Fortress-Hysteria2-Salamander [Scrambled QUIC Anti-Throttling]",
-        "Fortress-Hysteria2-Standard [Brutal BBR Maximum 4K]",
+        "Fortress-Reality-TCP [TLS Masking & Edge SNI]",
+        "Fortress-Hysteria2-Salamander [Scrambled QUIC Obfuscation]",
+        "Fortress-Hysteria2-Standard [BBR Congestion Control]",
         "Fortress-TUIC5 [0-RTT Fast Mobile Roaming]",
         "Fortress-Shadowsocks2022 [Ultra-Low Battery AEAD]",
         "Fortress-WireGuard-Native [Direct Kernel Line-Rate]",
-        "Fortress-WireGuard-TCP [Captive Portal & Strict TCP]"
+        "Fortress-WireGuard-TCP [TCP Encapsulated]"
       ],
       "default": "auto-fastest"
     },
@@ -64,13 +64,13 @@
       "type": "urltest",
       "tag": "auto-fastest",
       "outbounds": [
-        "Fortress-Reality-TCP [DPI & Campus Firewall Slayer]",
-        "Fortress-Hysteria2-Salamander [Scrambled QUIC Anti-Throttling]",
-        "Fortress-Hysteria2-Standard [Brutal BBR Maximum 4K]",
+        "Fortress-Reality-TCP [TLS Masking & Edge SNI]",
+        "Fortress-Hysteria2-Salamander [Scrambled QUIC Obfuscation]",
+        "Fortress-Hysteria2-Standard [BBR Congestion Control]",
         "Fortress-TUIC5 [0-RTT Fast Mobile Roaming]",
         "Fortress-Shadowsocks2022 [Ultra-Low Battery AEAD]",
         "Fortress-WireGuard-Native [Direct Kernel Line-Rate]",
-        "Fortress-WireGuard-TCP [Captive Portal & Strict TCP]"
+        "Fortress-WireGuard-TCP [TCP Encapsulated]"
       ],
       "url": "https://www.google.com/generate_204",
       "interval": "3m",
@@ -78,7 +78,7 @@
     },
     {
       "type": "vless",
-      "tag": "Fortress-Reality-TCP [DPI & Campus Firewall Slayer]",
+      "tag": "Fortress-Reality-TCP [TLS Masking & Edge SNI]",
       "server": "<YOUR_SERVER_IP>",
       "server_port": 443,
       "uuid": "<YOUR_CLIENT_UUID>",
@@ -99,7 +99,7 @@
     },
     {
       "type": "hysteria2",
-      "tag": "Fortress-Hysteria2-Salamander [Scrambled QUIC Anti-Throttling]",
+      "tag": "Fortress-Hysteria2-Salamander [Scrambled QUIC Obfuscation]",
       "server": "<YOUR_SERVER_IP>",
       "server_port": 9444,
       "password": "<YOUR_HYSTERIA2_PASSWORD>",
@@ -119,7 +119,7 @@
     },
     {
       "type": "hysteria2",
-      "tag": "Fortress-Hysteria2-Standard [Brutal BBR Maximum 4K]",
+      "tag": "Fortress-Hysteria2-Standard [BBR Congestion Control]",
       "server": "<YOUR_SERVER_IP>",
       "server_port": 8443,
       "password": "<YOUR_HYSTERIA2_PASSWORD>",
@@ -172,7 +172,7 @@
     },
     {
       "type": "wireguard",
-      "tag": "Fortress-WireGuard-TCP [Captive Portal & Strict TCP]",
+      "tag": "Fortress-WireGuard-TCP [TCP Encapsulated]",
       "server": "127.0.0.1",
       "server_port": 51820,
       "local_address": [

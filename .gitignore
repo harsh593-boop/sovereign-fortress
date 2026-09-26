@@ -76,3 +76,4 @@ SovereignFortress.bat
 LaunchSovereignApp.bat
 known_hosts
 collect_server_forensics.py
+verify_endpoints.py

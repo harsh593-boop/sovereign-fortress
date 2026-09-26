@@ -1,21 +1,23 @@
-# Sovereign Fortress — Multi-Protocol Anti-Censorship & Zero-Trust VPN Suite (2026)
+# Sovereign Fortress — Multi-Protocol Privacy & Transport Research Suite (2026)
 
 [![Author: harsh593-boop](https://img.shields.io/badge/Author-harsh593--boop-blue.svg)](https://github.com/harsh593-boop)
 [![License: Proprietary Source-Available](https://img.shields.io/badge/License-Proprietary%20Source--Available-red.svg)](LICENSE)
-[![Copyright: harsh593-boop](https://img.shields.io/badge/Copyright-(c)%202026%20harsh593--boop-blue.svg)](LICENSE)
-[![FDE Encryption](https://img.shields.io/badge/Full%20Disk%20Encryption-OCI%20AES--256%20%7C%20FIPS%20140--2-gold.svg)]()
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Android%20%7C%20Linux%20%7C%20iOS%20%7C%20macOS-emerald.svg)]()
-[![Free Tier](https://img.shields.io/badge/OCI%20Always%20Free-100%25%20%240%2Fmo-purple.svg)]()
-[![Censorship Resistance](https://img.shields.io/badge/Censorship%20Resistance-GFW%20%7C%20FortiGate%20%7C%20DPI%20Slayer-red.svg)]()
-[![Self-Hosted DNS](https://img.shields.io/badge/DNS-Recursive%20Unbound%20%7C%20Zero--Log-blueviolet.svg)]()
+[![Legal: Educational & Research Only](https://img.shields.io/badge/Status-Educational%20%26%20Research%20Only-green.svg)](LEGAL.md)
+[![Terms: Acceptable Use](https://img.shields.io/badge/Terms-Acceptable%20Use%20Policy-blue.svg)](TERMS.md)
+[![Privacy: Zero--Log](https://img.shields.io/badge/Privacy-Strict%20Zero--Log%20RAM-emerald.svg)](PRIVACY.md)
+[![AI Co-Authorship](https://img.shields.io/badge/Development-AI--Assisted%20Research-indigo.svg)](LEGAL.md)
 
-A modern, sovereign, zero-log multi-protocol VPN and proxy architecture designed to defeat severe network censorship, deep packet inspection (DPI), active probing, captive portals, and nation-state firewalls (GFW, Fortinet FortiGate, RKN).
+A modern, sovereign, zero-log multi-protocol research testbed designed for studying encrypted transport protocols, measuring packet resilience over lossy wireless channels, evaluating zero-trust ephemeral memory architectures, and testing Let's Encrypt automated TLS integration.
+
+> [!IMPORTANT]
+> **Legal, Educational & Non-Circumvention Notice:**  
+> This project is published **strictly for personal research, educational study, and protocol benchmarking**. The author **does not endorse, promote, or encourage the unauthorized circumvention of network security measures, firewalls, terms of service, or institutional codes of conduct**. All users are solely responsible for ensuring compliance with all local regulations and acceptable use policies. See [LEGAL.md](LEGAL.md) and [TERMS.md](TERMS.md) for complete details.
 
 Runs 100% within the **Oracle Cloud Infrastructure (OCI) Always Free Tier ($0/month forever)**.
 
 ---
 
-## 🏗️ System Architecture & Defense Stack
+## 🏗️ System Architecture & Protocol Stack
 
 ```mermaid
 flowchart TD
@@ -25,7 +27,7 @@ flowchart TD
         YogaDNS["YogaDNS (Windows System DNS Driver)"]
     end
 
-    subgraph DefenseGrid["2. Network Transit & Censorship Evasion Matrix"]
+    subgraph DefenseGrid["2. Network Transit & Protocol Evaluation Matrix"]
         Reality["VLESS + XTLS-Reality (TCP 443)\nCamouflage: gateway.icloud.com (Apple CDN Edge)"]
         Salamander["Hysteria 2 Salamander (UDP 9444)\nChaCha20 XOR QUIC Packet Header Scrambler"]
         Hy2Std["Hysteria 2 Standard (UDP 8443)\nBrutal BBR Congestion Control (Lossy Wi-Fi)"]

@@ -104,8 +104,8 @@ PROTOCOLS = [
         "port": "TCP 443",
         "proto": "tcp",
         "port_num": 443,
-        "badge": "DPI & Campus Firewall Slayer",
-        "desc": "[DPI & Campus Firewall Slayer] — Primary weapon on strict campus Wi-Fi. Masks traffic as Apple iCloud CDN; active probes are forwarded to Apple.",
+        "badge": "TLS Masking & Edge SNI",
+        "desc": "[TLS Masking & Edge Routing] — Encapsulates traffic using VLESS Reality with Apple CDN SNI; active non-proxy probes are routed to destination.",
         "link": f"vless://{UUID}@{SERVER_IP}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni={REALITY_SNI}&fp=chrome&pbk={REALITY_PUBKEY}&sid={REALITY_SHORTID}&type=tcp&headerType=none#Fortress-Reality-TCP"
     },
     {
@@ -113,8 +113,8 @@ PROTOCOLS = [
         "port": "UDP 9444",
         "proto": "udp",
         "port_num": 9444,
-        "badge": "Scrambled QUIC Anti-Throttling",
-        "desc": "[Scrambled QUIC - Anti-Throttling] — ChaCha20 XOR packet header scrambler. Use when campus firewall throttles or drops standard QUIC/UDP.",
+        "badge": "Scrambled QUIC Obfuscation",
+        "desc": "[Scrambled QUIC Obfuscation] — ChaCha20 XOR packet header scrambler designed for high-loss wireless UDP channels.",
         "link": f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:9444?sni=www.microsoft.com&alpn=h3&obfs=salamander&obfs-password={SALAMANDER_PASS}{pin_param}#Fortress-Hysteria2-Salamander"
     },
     {
@@ -122,8 +122,8 @@ PROTOCOLS = [
         "port": "UDP 8443",
         "proto": "udp",
         "port_num": 8443,
-        "badge": "Brutal BBR Maximum Speed 4K",
-        "desc": "[Brutal BBR - Maximum Speed 4K] — Aggressive congestion control designed for lossy campus Wi-Fi. Delivers gigabit throughput for video and downloads.",
+        "badge": "BBR Congestion Control",
+        "desc": "[BBR Congestion Control] — Aggressive congestion control optimized for lossy wireless connections and high throughput.",
         "link": f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:8443?sni=www.microsoft.com&alpn=h3{pin_param}#Fortress-Hysteria2-Standard"
     },
     {
@@ -132,7 +132,7 @@ PROTOCOLS = [
         "proto": "udp",
         "port_num": 9443,
         "badge": "0-RTT Fast Mobile Roaming",
-        "desc": "[0-RTT Fast Mobile Roaming] — Zero handshake latency when switching between campus Wi-Fi APs or mobile data on Android.",
+        "desc": "[0-RTT Fast Mobile Roaming] — Zero handshake latency when switching between Wi-Fi access points or mobile data.",
         "link": f"tuic://{UUID}:{HY2_PASSWORD}@{SERVER_IP}:9443?congestion_control=bbr&alpn=h3&sni=www.microsoft.com{pin_param}#Fortress-TUIC5-UDP"
     },
     {
@@ -149,8 +149,8 @@ PROTOCOLS = [
         "port": "TCP 8080",
         "proto": "tcp",
         "port_num": 8080,
-        "badge": "Captive Portal & TCP Slayer",
-        "desc": "[Captive Portal & Strict TCP Slayer] — Wraps WireGuard inside HTTPS WebSockets (wstunnel) to bypass captive portals blocking UDP.",
+        "badge": "TCP WebSocket Tunneling",
+        "desc": "[TCP WebSocket Tunneling] — Wraps WireGuard inside HTTPS WebSockets (wstunnel) for strict TCP-only network environments.",
         "link": f"wstunnel://{SERVER_IP}:8080?sni=www.microsoft.com&prefix=&tunnel=127.0.0.1:51820#Fortress-WireGuard-TCP"
     },
     {
