@@ -265,6 +265,11 @@ class SovereignApp(tk.Tk):
                               command=self.lock_vault)
         btn_vault.pack(side="right", padx=3)
 
+        btn_ca = tk.Button(act_frame, text="🛡️ Trust CA", bg="#1f2937", fg="#fbbf24", activebackground="#374151",
+                           activeforeground="#fbbf24", font=("Segoe UI", 9), relief="flat", padx=8, pady=6, cursor="hand2",
+                           command=self.trust_root_ca)
+        btn_ca.pack(side="right", padx=3)
+
         # Scrollable Protocol Modes Frame
         container = tk.Frame(self, bg="#0b0f19")
         container.pack(fill="both", expand=True, padx=16, pady=(0, 12))
@@ -613,6 +618,19 @@ class SovereignApp(tk.Tk):
 
     def open_portal(self):
         webbrowser.open(PORTAL_URL)
+
+    def trust_root_ca(self):
+        ca_path = os.path.join(APP_DIR, "ca.crt")
+        if not os.path.exists(ca_path):
+            messagebox.showerror("Error", "ca.crt not found in application directory.")
+            return
+
+        bat = os.path.join(APP_DIR, "Trust-Certificate.bat")
+        if os.path.exists(bat):
+            subprocess.Popen(["cmd.exe", "/c", "start", bat])
+        else:
+            cmd = f'Import-Certificate -FilePath "{ca_path}" -CertStoreLocation Cert:\\CurrentUser\\Root'
+            subprocess.Popen(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", cmd])
 
     def run_wstunnel(self):
         bat = os.path.join(APP_DIR, "start-wstunnel.bat")
