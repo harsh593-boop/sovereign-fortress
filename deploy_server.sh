@@ -241,53 +241,45 @@ server:
     num-threads: 2
     msg-cache-size: 32m
     rrset-cache-size: 64m
-    infra-cache-numhosts: 10000
+    tls-cert-bundle: "/etc/ssl/certs/ca-certificates.crt"
 EOF
 
-systemctl restart unbound
-systemctl enable unbound
-echo "[+] Unbound Recursive DNS running on 127.0.0.1:5335 & 10.8.0.1:5335 (DNSSEC Enabled, Zero Logging)."
-
-# 9. Generate Hardened Sing-box Configuration (IPv4-bound, Zero-Leak)
-echo "[*] Generating Sing-box core configuration in RAM..."
 NEXTDNS_ID=$(grep -Po '"nextdns_id":\s*"\K[^"]*' "$DISK_DIR/fortress_config.json" 2>/dev/null || echo "")
 
 if [ -n "$NEXTDNS_ID" ] && [ "$NEXTDNS_ID" != "<YOUR_NEXTDNS_ID>" ]; then
-    SERVER_DNS_JSON='{
-    "servers": [
-      {
-        "tag": "nextdns",
-        "address": "https://dns.nextdns.io/'"${NEXTDNS_ID}"'",
-        "address_resolver": "sovereign-unbound",
-        "detour": "direct",
-        "strategy": "prefer_ipv4"
-      },
-      {
-        "tag": "sovereign-unbound",
-        "address": "udp://127.0.0.1:5335",
-        "detour": "direct"
-      }
-    ],
-    "rules": [
-      {
-        "domain": [
-          "dns.nextdns.io"
-        ],
-        "server": "sovereign-unbound"
-      },
-      {
-        "outbound": "any",
-        "server": "nextdns"
-      }
-    ],
-    "strategy": "prefer_ipv4"
-  }'
+    cat <<EOF >> /etc/unbound/unbound.conf.d/fortress-unbound.conf
+
+forward-zone:
+    name: "."
+    forward-tls-upstream: yes
+    forward-addr: 45.90.28.0#${NEXTDNS_ID}.dns.nextdns.io
+    forward-addr: 45.90.30.0#${NEXTDNS_ID}.dns.nextdns.io
+    forward-addr: 1.1.1.1@853#cloudflare-dns.com
+    forward-addr: 9.9.9.9@853#dns.quad9.net
+EOF
 else
-    SERVER_DNS_JSON='{
+    cat <<EOF >> /etc/unbound/unbound.conf.d/fortress-unbound.conf
+
+forward-zone:
+    name: "."
+    forward-tls-upstream: yes
+    forward-addr: 1.1.1.1@853#cloudflare-dns.com
+    forward-addr: 1.0.0.1@853#cloudflare-dns.com
+    forward-addr: 9.9.9.9@853#dns.quad9.net
+EOF
+fi
+
+systemctl restart unbound
+systemctl enable unbound
+echo "[+] Unbound Recursive DNS running on 127.0.0.1:5335 & 10.8.0.1:5335 (DNS-over-TLS Upstream, Zero Logging)."
+
+# 9. Generate Hardened Sing-box Configuration (IPv4-bound, Zero-Leak)
+echo "[*] Generating Sing-box core configuration in RAM..."
+SERVER_DNS_JSON='{
     "servers": [
       {
         "tag": "sovereign-unbound",
-        "address": "udp://127.0.0.1:5335",
+        "address": "127.0.0.1:5335",
         "detour": "direct"
       }
     ],
@@ -299,7 +291,6 @@ else
     ],
     "strategy": "prefer_ipv4"
   }'
-fi
 
 cat <<EOF > "$RAM_DIR/config.json"
 {

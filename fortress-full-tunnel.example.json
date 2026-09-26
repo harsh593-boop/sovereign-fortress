@@ -5,18 +5,31 @@
   "dns": {
     "servers": [
       {
+        "tag": "dns-remote",
+        "address": "tcp://127.0.0.1:5335",
+        "detour": "proxy"
+      },
+      {
         "tag": "dns-direct",
         "address": "local",
         "detour": "direct"
-      },
-      {
-        "tag": "dns-remote",
-        "address": "https://dns.nextdns.io/<YOUR_NEXTDNS_ID>",
-        "address_resolver": "dns-direct",
-        "detour": "proxy"
       }
     ],
     "rules": [
+      {
+        "domain": [
+          "campus.internal"
+        ],
+        "domain_suffix": [
+          "campus.internal",
+          ".campus.internal",
+          "local",
+          ".local",
+          "internal",
+          ".internal"
+        ],
+        "server": "dns-direct"
+      },
       {
         "outbound": "any",
         "server": "dns-remote"

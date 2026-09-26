@@ -771,7 +771,7 @@ def get_singbox_json_config(mode="full"):
             "servers": [
                 {
                     "tag": "dns-remote",
-                    "address": remote_dns_addr,
+                    "address": "tcp://127.0.0.1:5335",
                     "detour": "proxy"
                 },
                 {
@@ -783,11 +783,7 @@ def get_singbox_json_config(mode="full"):
             "rules": [
                 {
                     "domain": [
-                        CAMPUS_DOMAIN,
-                        "dns.nextdns.io",
-                        "cloudflare-dns.com",
-                        "one.one.one.one",
-                        "dns.google"
+                        CAMPUS_DOMAIN
                     ],
                     "domain_suffix": [
                         CAMPUS_DOMAIN,
@@ -795,12 +791,13 @@ def get_singbox_json_config(mode="full"):
                         "local",
                         ".local",
                         "internal",
-                        ".internal",
-                        ".nextdns.io",
-                        ".cloudflare-dns.com",
-                        ".dns.google"
+                        ".internal"
                     ],
                     "server": "dns-direct"
+                },
+                {
+                    "outbound": "any",
+                    "server": "dns-remote"
                 }
             ],
             "strategy": "prefer_ipv4"
