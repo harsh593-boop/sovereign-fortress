@@ -1,0 +1,55 @@
+name: Repository privacy and security checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  privacy-audit:
+    name: Scan worktree and Git objects
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run offline scanner tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Scan the complete worktree and local Git blobs
+        run: python check_repo_privacy.py
+
+      - name: Check patch formatting
+        run: git diff --check
+
+      - name: Verify no prohibited tracked paths
+        shell: bash
+        run: |
+          python - <<'PY'
+          import check_repo_privacy
+          import subprocess
+          import sys
+
+          paths = subprocess.check_output(["git", "ls-files"], text=True).splitlines()
+          forbidden = [path for path in paths if check_repo_privacy._path_is_forbidden(path)]
+          if forbidden:
+              print(f"Found {len(forbidden)} prohibited tracked path(s); names are omitted from CI output.")
+              sys.exit(1)
+          print("Tracked-path policy check passed.")
+          PY

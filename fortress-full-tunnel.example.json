@@ -1,0 +1,213 @@
+{
+  "log": {
+    "level": "warn"
+  },
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-remote",
+        "address": "tcp://10.8.0.1:5335",
+        "detour": "proxy"
+      }
+    ],
+    "strategy": "prefer_ipv4"
+  },
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "address": [
+        "172.19.0.1/30",
+        "fd00:face:1::1/126"
+      ],
+      "auto_route": true,
+      "strict_route": true,
+      "route_exclude_address": [
+        "127.0.0.0/8",
+        "169.254.0.0/16",
+        "<YOUR_SERVER_IP>/32"
+      ],
+      "stack": "mixed",
+      "endpoint_independent_nat": true,
+      "sniff": true
+    },
+    {
+      "type": "mixed",
+      "tag": "mixed-in",
+      "listen": "127.0.0.1",
+      "listen_port": 2080,
+      "sniff": true
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "selector",
+      "tag": "proxy",
+      "outbounds": [
+        "auto-fastest",
+        "Fortress-Reality-TCP [TLS Masking & Edge SNI]",
+        "Fortress-Hysteria2-Salamander [Scrambled QUIC Obfuscation]",
+        "Fortress-Hysteria2-Standard [BBR Congestion Control]",
+        "Fortress-TUIC5 [0-RTT Fast Mobile Roaming]",
+        "Fortress-Shadowsocks2022 [Ultra-Low Battery AEAD]",
+        "Fortress-WireGuard-Native [Direct Kernel Line-Rate]",
+        "Fortress-WireGuard-TCP [TCP Encapsulated]"
+      ],
+      "default": "auto-fastest"
+    },
+    {
+      "type": "urltest",
+      "tag": "auto-fastest",
+      "outbounds": [
+        "Fortress-Reality-TCP [TLS Masking & Edge SNI]",
+        "Fortress-Hysteria2-Salamander [Scrambled QUIC Obfuscation]",
+        "Fortress-Hysteria2-Standard [BBR Congestion Control]",
+        "Fortress-TUIC5 [0-RTT Fast Mobile Roaming]",
+        "Fortress-Shadowsocks2022 [Ultra-Low Battery AEAD]"
+      ],
+      "url": "https://www.google.com/generate_204",
+      "interval": "3m",
+      "tolerance": 50
+    },
+    {
+      "type": "vless",
+      "tag": "Fortress-Reality-TCP [TLS Masking & Edge SNI]",
+      "server": "<YOUR_SERVER_IP>",
+      "server_port": 443,
+      "uuid": "<YOUR_CLIENT_UUID>",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "gateway.icloud.com",
+        "reality": {
+          "enabled": true,
+          "public_key": "<YOUR_REALITY_PUBLIC_KEY>",
+          "short_id": "<YOUR_REALITY_SHORT_ID>"
+        },
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      }
+    },
+    {
+      "type": "hysteria2",
+      "tag": "Fortress-Hysteria2-Salamander [Scrambled QUIC Obfuscation]",
+      "server": "<YOUR_SERVER_IP>",
+      "server_port": 9444,
+      "password": "<YOUR_HYSTERIA2_PASSWORD>",
+      "obfs": {
+        "type": "salamander",
+        "password": "<YOUR_SALAMANDER_PASSWORD>"
+      },
+      "tls": {
+        "enabled": true,
+        "server_name": "www.microsoft.com",
+        "insecure": false,
+        "alpn": ["h3"],
+        "certificate": [
+          "<YOUR_CA_CERT_PEM>"
+        ]
+      }
+    },
+    {
+      "type": "hysteria2",
+      "tag": "Fortress-Hysteria2-Standard [BBR Congestion Control]",
+      "server": "<YOUR_SERVER_IP>",
+      "server_port": 8443,
+      "password": "<YOUR_HYSTERIA2_PASSWORD>",
+      "tls": {
+        "enabled": true,
+        "server_name": "www.microsoft.com",
+        "insecure": false,
+        "alpn": ["h3"],
+        "certificate": [
+          "<YOUR_CA_CERT_PEM>"
+        ]
+      }
+    },
+    {
+      "type": "tuic",
+      "tag": "Fortress-TUIC5 [0-RTT Fast Mobile Roaming]",
+      "server": "<YOUR_SERVER_IP>",
+      "server_port": 9443,
+      "uuid": "<YOUR_CLIENT_UUID>",
+      "password": "<YOUR_HYSTERIA2_PASSWORD>",
+      "congestion_control": "bbr",
+      "tls": {
+        "enabled": true,
+        "server_name": "www.microsoft.com",
+        "insecure": false,
+        "alpn": ["h3"],
+        "certificate": [
+          "<YOUR_CA_CERT_PEM>"
+        ]
+      }
+    },
+    {
+      "type": "shadowsocks",
+      "tag": "Fortress-Shadowsocks2022 [Ultra-Low Battery AEAD]",
+      "server": "<YOUR_SERVER_IP>",
+      "server_port": 10443,
+      "method": "2022-blake3-aes-256-gcm",
+      "password": "<YOUR_SHADOWSOCKS_PASSWORD>"
+    },
+    {
+      "type": "wireguard",
+      "tag": "Fortress-WireGuard-Native [Direct Kernel Line-Rate]",
+      "local_address": [
+        "10.66.66.2/32"
+      ],
+      "private_key": "<YOUR_WG_CLIENT_PRIVATE_KEY>",
+      "peers": [
+        {
+          "server": "<YOUR_SERVER_IP>",
+          "server_port": 51820,
+          "public_key": "<YOUR_WG_SERVER_PUBLIC_KEY>",
+          "allowed_ips": ["0.0.0.0/0"]
+        }
+      ],
+      "mtu": 1360
+    },
+    {
+      "type": "wireguard",
+      "tag": "Fortress-WireGuard-TCP [TCP Encapsulated]",
+      "local_address": [
+        "10.66.66.2/32"
+      ],
+      "private_key": "<YOUR_WG_CLIENT_PRIVATE_KEY>",
+      "peers": [
+        {
+          "server": "127.0.0.1",
+          "server_port": 51820,
+          "public_key": "<YOUR_WG_SERVER_PUBLIC_KEY>",
+          "allowed_ips": ["0.0.0.0/0"]
+        }
+      ],
+      "mtu": 1360
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    },
+    {
+      "type": "block",
+      "tag": "block-ipv6"
+    }
+  ],
+  "route": {
+    "auto_detect_interface": true,
+    "rules": [
+      {
+        "action": "hijack-dns"
+      },
+      {
+        "ip_cidr": ["::/0"],
+        "outbound": "block-ipv6"
+      },
+      {
+        "outbound": "proxy"
+      }
+    ]
+  }
+}

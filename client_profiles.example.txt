@@ -1,0 +1,106 @@
+================================================================================
+          SOVEREIGN FORTRESS: REFERENCE CLIENT PROFILES (2026)
+================================================================================
+Server IP: <YOUR_SERVER_IP> (Oracle Cloud Mumbai - 100% Always Free Tier)
+Architecture: Selected volatile runtime state, conservative service logging, BBR tuning
+Engine: Sing-box 1.11+ Core (Fully Hardened Schema & Decoy Masquerading)
+Defense: Google Authenticator 2FA PAM, Active Reality Mirroring, DPAPI Vault
+
+================================================================================
+[1] UNIVERSAL HIDDIFY SETUP (WINDOWS, ANDROID, iOS, macOS)
+================================================================================
+ZERO CLIENT-SIDE SCRIPTS REQUIRED. Just install Hiddify App and paste or scan!
+App Download: https://github.com/hiddify/hiddify-app/releases (or Google Play Store)
+
+1. Standard Full-Traffic Subscription Link (Hiddify -> "+ New Profile"):
+   https://<YOUR_SERVER_IP>:8443/sub/<YOUR_SUBSCRIPTION_TOKEN>
+
+2. 1-Click Universal Auto-Import Link (Click in any browser to open & import):
+   hiddify://import/https%3A%2F%2F%3CYOUR_SERVER_IP%3E%3A8443%2Fsub%2F%3CYOUR_SUBSCRIPTION_TOKEN%3E%3Fmode%3Dfull#SovereignFortress
+
+3. Traffic-Only Mode Link (For YogaDNS / NextDNS / Chrome Secure DNS Coexistence):
+   https://<YOUR_SERVER_IP>:8443/sub/<YOUR_SUBSCRIPTION_TOKEN>?mode=traffic-only
+   1-Click Import:
+   hiddify://import/https%3A%2F%2F%3CYOUR_SERVER_IP%3E%3A8443%2Fsub%2F%3CYOUR_SUBSCRIPTION_TOKEN%3E%3Fmode%3Dtraffic-only#SovereignFortress-TrafficOnly
+
+4. Real-Time Dynamic 2FA Subscription (Ultra-Paranoid Mode):
+   Even without saving a permanent token, you can fetch your profile on-demand
+   using your phone's live 6-digit Google Authenticator code directly in the URL:
+   https://<YOUR_SERVER_IP>:8443/sub/<YOUR_CURRENT_6_DIGIT_CODE>
+   Example: https://<YOUR_SERVER_IP>:8443/sub/404620
+
+5. Universal Base64 Subscription Link (For Clash / v2rayNG / Shadowrocket):
+   https://<YOUR_SERVER_IP>:8443/sub/<YOUR_SUBSCRIPTION_TOKEN>/b64
+
+6. Universal Subscription QR Code (Scan with Hiddify App Camera on Phone):
+   qr_codes/qr_hiddify_universal.png
+
+* Routing behavior is mode-specific:
+  - Full Tunnel: public IPv4 and DNS are proxied through the server's private resolver at <YOUR_SERVER_IP>:5335; private/LAN traffic is not exempted.
+  - Traffic-Only: configured private/LAN destinations and common DNS transports are best-effort direct; unknown application DoH may still be proxied.
+  - IPv6 is blocked while the profile is active; this is not a persistent client kill switch after the tunnel stops.
+  - Neither profile proves arbitrary DNS egress or WebRTC safety without Windows packet capture/WFP verification.
+
+================================================================================
+[2] SECURE WEB MANAGEMENT PORTAL (REMOTE SERVER VAULT)
+================================================================================
+Access the live Sovereign Fortress dashboard directly from your browser:
+- Encrypted HTTPS Portal:    https://<YOUR_SERVER_IP>:8443/portal
+
+Login Authentication (Dual Option):
+  Option A: Master Token: <YOUR_SUBSCRIPTION_TOKEN>
+  Option B: 6-digit Google Authenticator code from your phone!
+
+Features:
+- Live QR Code display powered by offline embedded engine (works even on firewalled LAN)
+- 1-Click Token Rotation (rotates the active token; review old copies and server logs separately)
+- Real-time protocol status and individual links
+- Active defense redirection: unauthorized scanners without keys are detoured to Apple CDN
+
+================================================================================
+[3] SERVER SSH TWO-FACTOR AUTHENTICATION (2FA TOTP)
+================================================================================
+Your server is locked with Two-Factor Authentication.
+Even if an adversary steals your PC or gets your private SSH key,
+they CANNOT log into your server without your phone's 6-digit code!
+
+Google Authenticator Setup:
+1. Open Google Authenticator / 1Password / Microsoft Authenticator on your phone.
+2. Scan the QR code saved at:
+   qr_codes/qr_ssh_totp.png
+   OR manually enter Secret Key: <YOUR_TOTP_SECRET>
+
+How to Connect to SSH:
+Run in terminal:
+  ssh -i "<PATH_TO_YOUR_SSH_KEY>" ubuntu@<YOUR_SERVER_IP>
+When prompted:
+  Verification code: <Enter 6-digit code from your phone app>
+
+================================================================================
+[4] INDIVIDUAL PROTOCOL DEEP-LINKS (STANDALONE MANUAL IMPORT)
+================================================================================
+[Auto-Balancer: Lowest Ping Dynamic Selector]
+auto-fastest: Measures the configured stealth proxy outbounds and selects the lowest-ping result; native WireGuard remains manual for networks that block UDP.
+
+[Protocol 1: VLESS + XTLS-Reality TCP Port 443 - Campus Stealth Champion]
+vless://<YOUR_UUID>@<YOUR_SERVER_IP>:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=gateway.icloud.com&fp=chrome&pbk=<YOUR_REALITY_PUBLIC_KEY>&sid=<YOUR_REALITY_SHORT_ID>&type=tcp&headerType=none#Fortress-Reality-TCP
+
+[Protocol 2: Hysteria 2 Salamander UDP Port 9444 - QUIC Packet Scrambler]
+hysteria2://<YOUR_HYSTERIA2_PASSWORD>@<YOUR_SERVER_IP>:9444?sni=www.microsoft.com&alpn=h3&obfs=salamander&obfs-password=<YOUR_SALAMANDER_PASSWORD>&pinSHA256=<YOUR_CERT_PIN_SHA256>#Fortress-Hysteria2-Salamander
+
+[Protocol 3: Hysteria 2 Standard UDP Port 8443 - Brutal BBR Speed Champion]
+hysteria2://<YOUR_HYSTERIA2_PASSWORD>@<YOUR_SERVER_IP>:8443?sni=www.microsoft.com&alpn=h3&pinSHA256=<YOUR_CERT_PIN_SHA256>#Fortress-Hysteria2-Standard
+
+[Protocol 4: TUIC v5 UDP Port 9443 - 0-RTT Rapid Mobile Reconnect]
+tuic://<YOUR_UUID>:<YOUR_HYSTERIA2_PASSWORD>@<YOUR_SERVER_IP>:9443?congestion_control=bbr&alpn=h3&sni=www.microsoft.com&pinSHA256=<YOUR_CERT_PIN_SHA256>#Fortress-TUIC5-UDP
+
+[Protocol 5: Shadowsocks-2022 TCP/UDP Port 10443 - AEAD Anti-Probing Proxy]
+ss://MjAyMi1ibGFrZTMtYWVzLTI1Ni1nY206<YOUR_SHADOWSOCKS_KEY>@<YOUR_SERVER_IP>:10443#Fortress-Shadowsocks2022
+
+[Protocol 6: Native WireGuard UDP Port 51820 - Line-Rate Kernel Tunnel]
+Import `fortress-wireguard.conf` into WireGuard Windows/Android client.
+Endpoint: <YOUR_SERVER_IP>:51820
+
+[Protocol 7: WireGuard over TCP / WSTunnel TCP Port 8080 - Strict Firewall Bypasser]
+Launch `start-wstunnel.bat` then activate `fortress-wireguard-tcp.conf` in WireGuard.
+WSTunnel encapsulates WireGuard inside HTTPS WebSockets to bypass total UDP blocks.
