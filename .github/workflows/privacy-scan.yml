@@ -30,6 +30,10 @@ jobs:
           python-version: '3.11'
 
       - name: Run offline scanner tests
+        env:
+          # The scanner intentionally inspects ignored files; do not create
+          # bytecode containing the synthetic fixture values used by tests.
+          PYTHONDONTWRITEBYTECODE: '1'
         run: python -m unittest discover -s tests -v
 
       - name: Scan the complete worktree and local Git blobs
