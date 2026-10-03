@@ -1,13 +1,12 @@
 {
   "log": {
-    "level": "warn"
+    "disabled": true
   },
   "dns": {
     "servers": [
       {
-        "tag": "dns-direct",
-        "address": "local",
-        "detour": "direct"
+        "type": "local",
+        "tag": "dns-direct"
       }
     ],
     "strategy": "prefer_ipv4"
@@ -31,15 +30,14 @@
         "<YOUR_SERVER_IP>/32"
       ],
       "stack": "mixed",
-      "endpoint_independent_nat": true,
-      "sniff": true
+      "mtu": 1400,
+      "dns_mode": "disabled"
     },
     {
       "type": "mixed",
       "tag": "mixed-in",
       "listen": "127.0.0.1",
-      "listen_port": 2080,
-      "sniff": true
+      "listen_port": 2080
     }
   ],
   "outbounds": [
@@ -48,13 +46,12 @@
       "tag": "proxy",
       "outbounds": [
         "auto-fastest",
-        "Fortress-Reality-TCP [TLS Masking & Edge SNI]",
-        "Fortress-Hysteria2-Salamander [Scrambled QUIC Obfuscation]",
-        "Fortress-Hysteria2-Standard [BBR Congestion Control]",
-        "Fortress-TUIC5 [0-RTT Fast Mobile Roaming]",
-        "Fortress-Shadowsocks2022 [Ultra-Low Battery AEAD]",
-        "Fortress-WireGuard-Native [Direct Kernel Line-Rate]",
-        "Fortress-WireGuard-TCP [TCP Encapsulated]"
+        "Fortress-Reality-TCP",
+        "Fortress-Hysteria2-Salamander",
+        "Fortress-Hysteria2-Standard",
+        "Fortress-TUIC5",
+        "Fortress-Shadowsocks2022",
+        "Fortress-WireGuard-Native"
       ],
       "default": "auto-fastest"
     },
@@ -62,11 +59,11 @@
       "type": "urltest",
       "tag": "auto-fastest",
       "outbounds": [
-        "Fortress-Reality-TCP [TLS Masking & Edge SNI]",
-        "Fortress-Hysteria2-Salamander [Scrambled QUIC Obfuscation]",
-        "Fortress-Hysteria2-Standard [BBR Congestion Control]",
-        "Fortress-TUIC5 [0-RTT Fast Mobile Roaming]",
-        "Fortress-Shadowsocks2022 [Ultra-Low Battery AEAD]"
+        "Fortress-Reality-TCP",
+        "Fortress-Hysteria2-Salamander",
+        "Fortress-Hysteria2-Standard",
+        "Fortress-TUIC5",
+        "Fortress-Shadowsocks2022"
       ],
       "url": "https://www.google.com/generate_204",
       "interval": "3m",
@@ -74,10 +71,10 @@
     },
     {
       "type": "vless",
-      "tag": "Fortress-Reality-TCP [TLS Masking & Edge SNI]",
+      "tag": "Fortress-Reality-TCP",
       "server": "<YOUR_SERVER_IP>",
       "server_port": 443,
-      "uuid": "<YOUR_CLIENT_UUID>",
+      "uuid": "<YOUR_UUID>",
       "flow": "xtls-rprx-vision",
       "tls": {
         "enabled": true,
@@ -95,7 +92,7 @@
     },
     {
       "type": "hysteria2",
-      "tag": "Fortress-Hysteria2-Salamander [Scrambled QUIC Obfuscation]",
+      "tag": "Fortress-Hysteria2-Salamander",
       "server": "<YOUR_SERVER_IP>",
       "server_port": 9444,
       "password": "<YOUR_HYSTERIA2_PASSWORD>",
@@ -105,9 +102,10 @@
       },
       "tls": {
         "enabled": true,
-        "server_name": "www.microsoft.com",
-        "insecure": false,
-        "alpn": ["h3"],
+        "server_name": "<YOUR_TLS_SERVER_NAME>",
+        "alpn": [
+          "h3"
+        ],
         "certificate": [
           "<YOUR_CA_CERT_PEM>"
         ]
@@ -115,15 +113,16 @@
     },
     {
       "type": "hysteria2",
-      "tag": "Fortress-Hysteria2-Standard [BBR Congestion Control]",
+      "tag": "Fortress-Hysteria2-Standard",
       "server": "<YOUR_SERVER_IP>",
       "server_port": 8443,
       "password": "<YOUR_HYSTERIA2_PASSWORD>",
       "tls": {
         "enabled": true,
-        "server_name": "www.microsoft.com",
-        "insecure": false,
-        "alpn": ["h3"],
+        "server_name": "<YOUR_TLS_SERVER_NAME>",
+        "alpn": [
+          "h3"
+        ],
         "certificate": [
           "<YOUR_CA_CERT_PEM>"
         ]
@@ -131,17 +130,18 @@
     },
     {
       "type": "tuic",
-      "tag": "Fortress-TUIC5 [0-RTT Fast Mobile Roaming]",
+      "tag": "Fortress-TUIC5",
       "server": "<YOUR_SERVER_IP>",
       "server_port": 9443,
-      "uuid": "<YOUR_CLIENT_UUID>",
+      "uuid": "<YOUR_UUID>",
       "password": "<YOUR_HYSTERIA2_PASSWORD>",
       "congestion_control": "bbr",
       "tls": {
         "enabled": true,
-        "server_name": "www.microsoft.com",
-        "insecure": false,
-        "alpn": ["h3"],
+        "server_name": "<YOUR_TLS_SERVER_NAME>",
+        "alpn": [
+          "h3"
+        ],
         "certificate": [
           "<YOUR_CA_CERT_PEM>"
         ]
@@ -149,61 +149,42 @@
     },
     {
       "type": "shadowsocks",
-      "tag": "Fortress-Shadowsocks2022 [Ultra-Low Battery AEAD]",
+      "tag": "Fortress-Shadowsocks2022",
       "server": "<YOUR_SERVER_IP>",
       "server_port": 10443,
       "method": "2022-blake3-aes-256-gcm",
       "password": "<YOUR_SHADOWSOCKS_PASSWORD>"
     },
     {
-      "type": "wireguard",
-      "tag": "Fortress-WireGuard-Native [Direct Kernel Line-Rate]",
-      "local_address": [
-        "10.66.66.2/32"
-      ],
-      "private_key": "<YOUR_WG_CLIENT_PRIVATE_KEY>",
-      "peers": [
-        {
-          "server": "<YOUR_SERVER_IP>",
-          "server_port": 51820,
-          "public_key": "<YOUR_WG_SERVER_PUBLIC_KEY>",
-          "allowed_ips": ["0.0.0.0/0"]
-        }
-      ],
-      "mtu": 1360
-    },
-    {
-      "type": "wireguard",
-      "tag": "Fortress-WireGuard-TCP [TCP Encapsulated]",
-      "local_address": [
-        "10.66.66.2/32"
-      ],
-      "private_key": "<YOUR_WG_CLIENT_PRIVATE_KEY>",
-      "peers": [
-        {
-          "server": "127.0.0.1",
-          "server_port": 51820,
-          "public_key": "<YOUR_WG_SERVER_PUBLIC_KEY>",
-          "allowed_ips": ["0.0.0.0/0"]
-        }
-      ],
-      "mtu": 1360
-    },
-    {
       "type": "direct",
       "tag": "direct"
-    },
-    {
-      "type": "block",
-      "tag": "block-ipv6"
     }
   ],
   "route": {
     "auto_detect_interface": true,
     "rules": [
       {
-        "ip_cidr": ["::/0"],
-        "outbound": "block-ipv6"
+        "ip_cidr": [
+          "::/0"
+        ],
+        "action": "reject"
+      },
+      {
+        "action": "sniff"
+      },
+      {
+        "process_name": [
+          "YogaDNS.exe",
+          "yogadns.exe",
+          "YogaDNS",
+          "NextDNS.exe",
+          "nextdns.exe",
+          "dnscrypt-proxy.exe",
+          "dnscrypt-proxy",
+          "stubby.exe",
+          "stubby"
+        ],
+        "outbound": "direct"
       },
       {
         "protocol": "dns",
@@ -218,24 +199,82 @@
         "outbound": "direct"
       },
       {
+        "domain": [
+          "dns.nextdns.io",
+          "cloudflare-dns.com",
+          "one.one.one.one",
+          "dns.google",
+          "dns.quad9.net",
+          "dns9.quad9.net",
+          "dns.adguard-dns.com",
+          "dns.adguard.com",
+          "doh.controld.com",
+          "dns.controld.com",
+          "doh.cleanbrowsing.org",
+          "doh.opendns.com"
+        ],
         "domain_suffix": [
+          "dns.nextdns.io",
+          "dns.quad9.net",
+          "dns.adguard-dns.com"
+        ],
+        "port": [
+          443,
+          853
+        ],
+        "outbound": "direct"
+      },
+      {
+        "ip_is_private": true,
+        "outbound": "direct"
+      },
+      {
+        "domain": [
+          "campus.internal"
+        ],
+        "domain_suffix": [
+          "campus.internal",
           ".campus.internal",
+          "local",
           ".local",
+          "internal",
           ".internal"
         ],
         "outbound": "direct"
       },
       {
         "ip_cidr": [
-          "10.0.0.0/8",
-          "172.16.0.0/12",
-          "192.168.0.0/16"
+          "<YOUR_SERVER_IP>/32"
         ],
         "outbound": "direct"
       },
       {
         "outbound": "proxy"
       }
-    ]
-  }
+    ],
+    "default_domain_resolver": "dns-direct"
+  },
+  "endpoints": [
+    {
+      "type": "wireguard",
+      "tag": "Fortress-WireGuard-Native",
+      "system": false,
+      "address": [
+        "10.8.0.2/32"
+      ],
+      "private_key": "<YOUR_WG_CLIENT_PRIVATE_KEY>",
+      "mtu": 1360,
+      "peers": [
+        {
+          "address": "<YOUR_SERVER_IP>",
+          "port": 51820,
+          "public_key": "<YOUR_WG_SERVER_PUBLIC_KEY>",
+          "allowed_ips": [
+            "0.0.0.0/0"
+          ],
+          "persistent_keepalive_interval": 15
+        }
+      ]
+    }
+  ]
 }

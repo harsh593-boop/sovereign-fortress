@@ -10,8 +10,8 @@
 A multi-protocol research testbed for studying encrypted transport protocols, measuring packet resilience over lossy wireless channels, evaluating ephemeral-memory designs, and testing Let's Encrypt automated TLS integration. Privacy and logging behavior remain deployment- and provider-dependent; see [PRIVACY.md](PRIVACY.md).
 
 > [!WARNING]
-> **Not production-validated.** The deployment script can regenerate credentials
-> and certificates on rerun, existing client software may rewrite imported
+> **Not production-ready.** The installer refuses existing deployments. Use
+> reviewed, backed-up migrations instead. Client software may rewrite imported
 > DNS/TUN rules, and there is no verified persistent Windows kill switch.
 > Traffic-only mode does not guarantee that arbitrary OS, browser, or app DNS
 > exits locally. Do not deploy or distribute profiles until exposed secrets are
@@ -21,7 +21,43 @@ A multi-protocol research testbed for studying encrypted transport protocols, me
 > **Legal, Educational & Non-Circumvention Notice:**
 > This project is published **strictly for personal research, educational study, and protocol benchmarking**. The author **does not endorse, promote, or encourage the unauthorized circumvention of network security measures, firewalls, terms of service, or institutional codes of conduct**. All users are solely responsible for ensuring compliance with all local regulations and acceptable use policies. See [LEGAL.md](LEGAL.md) and [TERMS.md](TERMS.md) for complete details.
 
-Runs 100% within the **Oracle Cloud Infrastructure (OCI) Always Free Tier ($0/month forever)**.
+Can be evaluated on an OCI VM. Pricing, eligibility, bandwidth limits, and service availability are provider-dependent—not guaranteed by this project.
+
+## Current verification and supported profiles
+
+See [SECURITY_REVIEW.md](SECURITY_REVIEW.md) for evidence and open release gates.
+The subscription defaults to **Sing-box 1.14** syntax. Request `&core=1.11`
+explicitly for the validated legacy 1.11.4 profile. The public JSON examples
+are **1.14** templates; do not load them unchanged into a 1.11 or 1.13 core.
+Hiddify may import only proxy nodes and regenerate routing/DNS; a successful
+import is not proof that either operating mode was preserved.
+
+Full-Tunnel and Traffic-Only both use TUN in the reference profiles. Traffic-Only
+means intended local DNS egress alongside tunneled payload traffic, **not**
+system-proxy-only mode. Arbitrary DoH cannot be identified universally.
+
+Private Windows client files belong under `%LOCALAPPDATA%\\SovereignFortress`,
+not the public checkout. The GUI can load a user-bound DPAPI `.enc` config
+without writing a plaintext copy. `FORTRESS_CLIENT_HOME` and
+`FORTRESS_CLIENT_CONFIG` provide explicit overrides. See [client paths](client_paths.py).
+
+Checks:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
+python3 comprehensive_verification.py --offline
+bash -n deploy_server.sh fortress-init.sh
+shellcheck deploy_server.sh fortress-init.sh
+python3 validate_profiles.py --legacy /path/to/sing-box-1.11.4 --current /path/to/sing-box-1.14.2
+python3 check_repo_privacy.py
+# Optional per-repository commit guard:
+git config core.hooksPath .githooks
+```
+
+Live checks are explicit opt-ins: `server_smoke_checks.py` runs on the VPS as
+root; `probe_proxy_transports.py` uses a protected private profile and proves
+only selected proxy connectivity. The old live verifiers are archival, gated
+by `--legacy-live`, and must not be used as release evidence.
 
 ---
 
@@ -48,9 +84,9 @@ flowchart TD
 
     subgraph CoreEngine["3. Sovereign Fortress Core (Oracle Cloud Mumbai)"]
          RAMFS["Optional volatile runtime (tmpfs /run/fortress)\nOperator-configured logging"]
-        Singbox["Sing-box 1.11+ Core Router\nUnprivileged 'fortress' User + Systemd Sandbox"]
+        Singbox["Version-pinned Sing-box Core Router\nUnprivileged 'fortress' User + Systemd Sandbox"]
          AdGuard["Self-Hosted AdGuard Home DNS\nQuery logging disabled • Operator-configured upstreams"]
-        SubDaemon["Dynamic 2FA HTTPS Subscription & Web Portal (TCP 8443)"]
+        SubDaemon["TLS Bearer Subscription & Optional Portal MFA (TCP 8443)"]
         PAM2FA["SSH PAM Google Authenticator (Key + TOTP Enforced)"]
     end
 
@@ -155,7 +191,11 @@ On your fresh Ubuntu server, run:
 ```bash
 git clone https://github.com/harsh593-boop/sovereign-fortress.git
 cd sovereign-fortress
-sudo bash deploy_server.sh
+# Fresh disposable VM only; replace these public placeholders.
+sudo env FORTRESS_SERVER_IP='<YOUR_SERVER_IP>' \
+  FORTRESS_DOMAIN='<YOUR_TLS_SERVER_NAME>' \
+  FORTRESS_AGH_SHA256='<VERIFIED_PINNED_ARCHIVE_SHA256>' \
+  bash deploy_server.sh
 ```
 
 The automated installer will:
@@ -164,18 +204,29 @@ The automated installer will:
 3. Install Sing-box 1.11.4 Core and WSTunnel with SHA-256 cryptographic verification.
 4. Generate 100% unique, high-entropy cryptographic keys for all protocols (UUID, x25519 Reality keypairs, Hysteria 2 / Salamander passwords, Shadowsocks-2022 AEAD keys, WireGuard keypairs, and a 128-bit Master Subscription Token `ft_sec_...`).
 5. Configure AdGuard Home on private/loopback listeners; query logging and statistics are disabled in the reference config, while DNS and host-provider metadata remain deployment-dependent.
-6. Configure Fail2ban intrusion defense and automatically generate a unique Google Authenticator RFC 6238 TOTP 2FA secret for SSH and the Web Portal.
+6. Leave SSH authentication unchanged by default. SSH/PAM changes require explicit `FORTRESS_CONFIGURE_SSH_2FA=1`, an enrolled `FORTRESS_ADMIN_USER`, and verified recovery access. Portal TOTP is separate and opt-in; never reuse the SSH seed.
 7. Enforce strict firewall policies and disable IPv6 to prevent network leaks.
 8. Launch the dynamic HTTPS subscription daemon and management portal on port `8443`.
 9. Write deployment credentials to the operator-controlled `/etc/fortress/fortress_config.json`; protect and transfer them out-of-band.
 
 ### Configuring Your 2FA Authenticator & Client App
-When deployment finishes:
-1. **Copy `/etc/fortress/fortress_config.json`** to your local machine as `fortress_config.json`.
-2. **Register 2FA in Google Authenticator / Aegis / 2FAS**:
-   * **In the Windows App**: Run `Launch Sovereign Fortress.bat` and click **`📱 2FA Setup QR`**. Scan the QR code or copy the secret key. The window displays a live 6-digit sync preview and countdown to confirm matching clocks!
-   * **In the Web Portal**: Open `https://<YOUR_SERVER_IP>:8443/portal` in your browser. Enter your Master Token (`ft_sec_...`) to unlock the dashboard and scan the 2FA QR code.
-   * **Via CLI**: Enter the `otpauth://...` URI or 32-character secret key printed at the end of `deploy_server.sh`.
+Keep deployment configuration and profiles outside the checkout. On Windows,
+store them in the restricted private client directory and protect them with
+`fortress_vault.py` or `install_client_bundle.py`. Neither the installer nor
+checks should print tokens or enrollment seeds.
+
+The portal requires the confidential token. Optional `portal_totp_required: true`
+requires **both** that token and a separately enrolled seed stored at
+`/var/lib/fortress/subscription/portal_totp_secret`; enroll it privately before
+enabling the flag in the runtime/persistent config. Standalone OTP subscription
+URLs are retired. SSH/PAM enrollment remains separate and is not exported.
+
+The GUI is a control/dashboard helper—not a verified VPN service or kill switch.
+Unlocking profiles creates private plaintext files until you lock them again.
+For the native 1.14 client, validate the decrypted profile with `sing-box check`
+before requesting elevation to run TUN. Do not run two TUN clients simultaneously.
+No root-CA installation is needed for a publicly trusted server certificate;
+a private CA requires independent fingerprint verification and explicit consent.
 
 ### Generating / Rotating Secrets Manually (Optional)
 If you ever want to generate your own unique tokens or rotate credentials independently:
@@ -240,7 +291,7 @@ See [`yogadns_rules.md`](yogadns_rules.md) for full step-by-step instructions:
 * **Fail2ban Intrusion Defense:** Enforces jail on SSH port 22 with automatic IP bans for repeated failed attempts.
 * **Least-Privilege Execution:** Sing-box and subscription daemons run as dedicated unprivileged system user `fortress` with strict systemd sandboxing.
 * **Token Revocation:** Rotates subscription credentials; operators must also remove exposed copies and review logs/backups.
-* **Dynamic 2FA Subscription:** Append your live 6-digit TOTP code (`/sub/<TOTP>`) to fetch profiles on demand with a 30-second expiry.
+* **Portal authentication:** High-entropy bearer token, with a separate optional second factor. Short OTPs alone cannot authenticate or export profiles; subscription URLs require the bearer token.
 * **Active Defense Camouflage:** Unauthorized requests automatically detour to Apple CDN edge.
 * **Optional Volatile Runtime:** Selected active state can operate in `/run/fortress` (`tmpfs`); operators must verify mounts, service permissions, host logs, and persistent templates themselves.
 * **Client DPAPI Protection:** Local keys encrypted at rest using Windows user-bound DPAPI (`CryptProtectData`).
@@ -260,7 +311,7 @@ The example deployment separates some runtime state from persistent configuratio
 * Volatile storage and conservative service logging reduce some local persistence; they are not proof of zero logs, zero disk footprint, or cryptographic zeroization.
 
 ### 3. Client-side vault and Windows DPAPI
-* **Windows DPAPI (`Protect-FortressVault.ps1`)**: On the local client machine, all connection profiles, subscription links, and TOTP secrets are encrypted using Windows Cryptographic Data Protection API (`CryptProtectData` with `DataProtectionScope.CurrentUser`).
+* **Windows DPAPI:** `fortress_vault.py` protects explicitly selected private client files under the current user. The PowerShell wrappers delegate to that implementation. Hiddify caches, application databases, clipboard contents, memory, swap, and backups are not automatically protected by this vault.
 * **Machine & User Session Entropy**: Vault ciphertexts are cryptographically bound using secondary entropy derived from user identity, computer name, and static salt. Offline drive cloning, cold disk extraction, or rogue processes in other user sessions cannot decrypt the credentials without access to the authenticated user's Windows session. (Note: As standard with user-scoped DPAPI, processes executing within the active user logon session can unprotect vault data; it is not hardware PCR-sealed to a TPM).
 
 ### 4. Local cleanup helper (`Shred-Fortress.ps1`)

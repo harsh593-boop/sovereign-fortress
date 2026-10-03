@@ -4,6 +4,9 @@
 # Multi-Protocol test deployment with AdGuard Home DNS and PAM 2FA
 # ==============================================================================
 set -euo pipefail
+umask 077
+WORK_DIR=$(mktemp -d)
+trap 'rm -rf "$WORK_DIR"' EXIT
 
 echo "================================================================="
 echo "   SOVEREIGN FORTRESS: COMPREHENSIVE SERVER INSTALLER           "
@@ -34,8 +37,19 @@ esac
 
 # Detect Public IP (allow an explicit value for restricted/offline environments)
 SERVER_IP="${FORTRESS_SERVER_IP:-$(curl -s4 https://api.ipify.org || curl -s4 https://ifconfig.me || ip route get 1.1.1.1 | awk '{print $7}')}"
-if [ -z "$SERVER_IP" ] || [[ ! "$SERVER_IP" =~ ^[0-9A-Fa-f:.]+$ ]]; then
-    echo "[-] Server address must be a numeric IPv4/IPv6 literal; set FORTRESS_SERVER_IP and retry."
+if ! python3 - "$SERVER_IP" <<'PY'
+import ipaddress, sys
+try:
+    ipaddress.IPv4Address(sys.argv[1])
+except ValueError:
+    sys.exit(1)
+PY
+then
+    echo "[-] This release requires a numeric IPv4 endpoint; set FORTRESS_SERVER_IP."
+    exit 1
+fi
+if [[ ! "${FORTRESS_AGH_SHA256:-}" =~ ^[a-fA-F0-9]{64}$ ]] || [ ! -f fortress-sub.py ] || [ ! -f fortress-init.sh ]; then
+    echo "[-] Supply the reviewed fortress-sub.py, fortress-init.sh and verified FORTRESS_AGH_SHA256 before installing."
     exit 1
 fi
 
@@ -84,6 +98,8 @@ FORTRESS_GID="$(id -g "$FORTRESS_USER")"
 # 3. Setup Volatile RAM Mount (tmpfs) & Persistent Configuration Storage
 RAM_DIR="/run/fortress"
 DISK_DIR="/etc/fortress"
+STATE_DIR="/var/lib/fortress/subscription"
+install -d -m 0700 -o "$FORTRESS_USER" -g "$FORTRESS_USER" "$STATE_DIR"
 mkdir -p "$DISK_DIR"
 chmod 700 "$DISK_DIR"
 
@@ -109,7 +125,7 @@ ensure_tmpfs_mount() {
     fi
 }
 
-ensure_tmpfs_mount "$RAM_DIR" "size=256M,mode=0755"
+ensure_tmpfs_mount "$RAM_DIR" "size=256M,mode=0700"
 if [ "$(findmnt -n -o FSTYPE --target "$RAM_DIR" 2>/dev/null || true)" != "tmpfs" ]; then
     echo "[-] Refusing to continue: ${RAM_DIR} is not mounted as tmpfs."
     exit 1
@@ -127,21 +143,10 @@ case "$SB_ARCH" in
     arm64) EXPECTED_SB_SHA256="4e687359db42b6a28ef93f9cd2cb9549c4b0079cc7e49bc5f6ecbf98257a2507" ;;
 esac
 
-curl -sSL "$SB_URL" -o "/tmp/${SB_TAR}"
-ACTUAL_SB_SHA256=$(sha256sum "/tmp/${SB_TAR}" | awk '{print $1}')
-
-if [ "$ACTUAL_SB_SHA256" != "$EXPECTED_SB_SHA256" ]; then
-    echo "[-] Cryptographic verification failed for Sing-box archive!"
-    echo "    Expected: $EXPECTED_SB_SHA256"
-    echo "    Actual:   $ACTUAL_SB_SHA256"
-    rm -f "/tmp/${SB_TAR}"
-    exit 1
-fi
-echo "[+] Sing-box SHA256 verified successfully: $ACTUAL_SB_SHA256"
-
-tar -xzf "/tmp/${SB_TAR}" -C /tmp/
-install -m 0755 "/tmp/sing-box-${SINGBOX_VER}-linux-${SB_ARCH}/sing-box" /usr/local/bin/sing-box
-rm -rf "/tmp/sing-box*"
+curl -fSL --connect-timeout 15 --max-time 180 "$SB_URL" -o "${WORK_DIR}/${SB_TAR}"
+printf '%s  %s\n' "$EXPECTED_SB_SHA256" "${WORK_DIR}/${SB_TAR}" | sha256sum -c - >/dev/null
+tar -xzf "${WORK_DIR}/${SB_TAR}" -C "$WORK_DIR"
+install -m 0755 "${WORK_DIR}/sing-box-${SINGBOX_VER}-linux-${SB_ARCH}/sing-box" /usr/local/bin/sing-box
 echo "[+] Installed: $(/usr/local/bin/sing-box version | head -n 1)"
 
 # 5. Install WSTunnel Core with Architecture & SHA-256 Verification
@@ -155,20 +160,10 @@ case "$WST_ARCH" in
     arm64) EXPECTED_WST_SHA256="99f9506d01d1b4073254609600ec5056dab8dc58aec75c32f6eb0508335a8fd2" ;;
 esac
 
-curl -sSL "$WST_URL" -o "/tmp/${WST_TAR}"
-if [ -n "$EXPECTED_WST_SHA256" ]; then
-    ACTUAL_WST_SHA256=$(sha256sum "/tmp/${WST_TAR}" | awk '{print $1}')
-    if [ "$ACTUAL_WST_SHA256" != "$EXPECTED_WST_SHA256" ]; then
-        echo "[-] Cryptographic verification failed for WSTunnel archive!"
-        rm -f "/tmp/${WST_TAR}"
-        exit 1
-    fi
-    echo "[+] WSTunnel SHA256 verified successfully: $ACTUAL_WST_SHA256"
-fi
-
-tar -xzf "/tmp/${WST_TAR}" -C /tmp/
-install -m 0755 "/tmp/wstunnel" /usr/local/bin/wstunnel
-rm -rf "/tmp/wstunnel*"
+curl -fSL --connect-timeout 15 --max-time 180 "$WST_URL" -o "${WORK_DIR}/${WST_TAR}"
+printf '%s  %s\n' "$EXPECTED_WST_SHA256" "${WORK_DIR}/${WST_TAR}" | sha256sum -c - >/dev/null
+tar -xzf "${WORK_DIR}/${WST_TAR}" -C "$WORK_DIR"
+install -m 0755 "${WORK_DIR}/wstunnel" /usr/local/bin/wstunnel
 echo "[+] Installed: WSTunnel $(/usr/local/bin/wstunnel --version)"
 
 # 6. Generate High-Entropy Cryptographic Keys
@@ -193,7 +188,7 @@ WG_CLIENT_PUB=$(echo "$WG_CLIENT_PRIV" | wg pubkey)
 
 # 7. Dedicated Private CA & Authenticated TLS Certificate
 echo "[*] Generating Dedicated Sovereign Private CA & SAN-enabled Certificate..."
-cat << 'EOFCACNF' > /tmp/ca_openssl.cnf
+cat << 'EOFCACNF' > "$WORK_DIR/ca_openssl.cnf"
 [ req ]
 distinguished_name = req_distinguished_name
 x509_extensions = v3_ca
@@ -212,18 +207,18 @@ authorityKeyIdentifier = keyid:always,issuer
 EOFCACNF
 
 openssl req -x509 -new -nodes -newkey rsa:4096 -days 3650 \
-    -config /tmp/ca_openssl.cnf \
+    -config "$WORK_DIR/ca_openssl.cnf" \
     -keyout "$DISK_DIR/ca.key" \
     -out "$DISK_DIR/ca.crt"
 
-cat << EOFSRVCNF > /tmp/server_openssl.cnf
+cat << EOFSRVCNF > "$WORK_DIR/server_openssl.cnf"
 [ req ]
 distinguished_name = req_distinguished_name
 req_extensions = v3_req
 prompt = no
 
 [ req_distinguished_name ]
-CN = www.microsoft.com
+CN = ${DOMAIN}
 O = Sovereign Fortress
 C = IN
 
@@ -234,21 +229,20 @@ extendedKeyUsage = serverAuth
 subjectAltName = @alt_names
 
 [ alt_names ]
-DNS.1 = www.microsoft.com
-DNS.2 = ${DOMAIN}
+DNS.1 = ${DOMAIN}
 IP.1 = ${SERVER_IP}
 EOFSRVCNF
 
 openssl req -new -nodes -newkey rsa:2048 \
-    -config /tmp/server_openssl.cnf \
+    -config "$WORK_DIR/server_openssl.cnf" \
     -keyout "$DISK_DIR/key.pem" \
     -out "$DISK_DIR/cert.csr"
 
 openssl x509 -req -in "$DISK_DIR/cert.csr" \
     -CA "$DISK_DIR/ca.crt" -CAkey "$DISK_DIR/ca.key" -CAcreateserial \
-    -extfile /tmp/server_openssl.cnf -extensions v3_req \
+    -extfile "$WORK_DIR/server_openssl.cnf" -extensions v3_req \
     -days 825 -out "$DISK_DIR/cert.pem"
-rm -f "$DISK_DIR/cert.csr" /tmp/ca_openssl.cnf /tmp/server_openssl.cnf
+rm -f "$DISK_DIR/cert.csr" "$WORK_DIR/ca_openssl.cnf" "$WORK_DIR/server_openssl.cnf"
 
 cp "$DISK_DIR/key.pem" "$RAM_DIR/key.pem"
 cp "$DISK_DIR/cert.pem" "$RAM_DIR/cert.pem"
@@ -273,11 +267,10 @@ AGH_DIR="/opt/AdGuardHome"
 AGH_DATA_DIR="${AGH_DIR}/data"
 AGH_CONFIG="${AGH_DIR}/AdGuardHome.yaml"
 mkdir -p "$AGH_DIR" "$AGH_DATA_DIR" "${RAM_DIR}/adguard"
-curl -fsSL --connect-timeout 10 -o /tmp/agh.tar.gz "$AGH_URL"
-printf '%s  %s\n' "$FORTRESS_AGH_SHA256" /tmp/agh.tar.gz | sha256sum -c - >/dev/null
-tar -xzf /tmp/agh.tar.gz -C /tmp/
-install -m 0755 /tmp/AdGuardHome/AdGuardHome "$AGH_DIR/AdGuardHome"
-rm -rf /tmp/AdGuardHome /tmp/agh.tar.gz
+curl -fsSL --connect-timeout 15 --max-time 180 -o "$WORK_DIR/agh.tar.gz" "$AGH_URL"
+printf '%s  %s\n' "$FORTRESS_AGH_SHA256" "$WORK_DIR/agh.tar.gz" | sha256sum -c - >/dev/null
+tar -xzf "$WORK_DIR/agh.tar.gz" -C "$WORK_DIR"
+install -m 0755 "$WORK_DIR/AdGuardHome/AdGuardHome" "$AGH_DIR/AdGuardHome"
 
 # Mount AdGuard Home working data on volatile RAM. This minimizes local
 # application persistence; it cannot prevent provider, kernel, or host logging.
@@ -296,8 +289,20 @@ fi
 
 cat <<EOF > "$AGH_CONFIG"
 schema_version: 29
-bind_host: 127.0.0.1
-bind_port: 3000
+http:
+  address: 127.0.0.1:3000
+  pprof:
+    enabled: false
+    port: 6060
+users: []
+querylog:
+  enabled: false
+  file_enabled: false
+  interval: 24h
+  size_memory: 0
+statistics:
+  enabled: false
+  interval: 24h
 auth_attempts: 5
 block_auth_min: 15
 http_proxy: ""
@@ -306,17 +311,12 @@ theme: auto
 log:
   enabled: false
   file: ""
-  timestamp: false
+  verbose: false
 dns:
   bind_hosts:
     - 127.0.0.1
     - 10.8.0.1
   port: 5335
-  statistics_interval: 0
-  querylog_enabled: false
-  querylog_file_enabled: false
-  querylog_interval: 0
-  querylog_size_memory: 0
   anonymize_client_ip: true
   protection_enabled: true
   blocking_mode: default
@@ -325,7 +325,7 @@ dns:
   blocked_response_ttl: 10
   parental_block_host: parental-block.adguard.org
   safebrowsing_block_host: standard-block.adguard.org
-  ratelimit: 0
+  ratelimit: 100
   ratelimit_subnet_len_ipv4: 24
   ratelimit_subnet_len_ipv6: 56
   ratelimit_whitelist: []
@@ -339,10 +339,11 @@ dns:
   bootstrap_dns:
     - 9.9.9.9
     - 1.1.1.1
-  all_servers: false
-  fastest_addr: true
+  upstream_mode: load_balance
   fastest_timeout: 1s
-  allowed_clients: []
+  allowed_clients:
+    - 127.0.0.0/8
+    - 10.8.0.0/24
   disallowed_clients: []
   blocked_hosts:
     - version.bind
@@ -351,56 +352,62 @@ dns:
   trusted_proxies:
     - 127.0.0.0/8
     - 10.8.0.0/24
-  cache_size: 67108864
-  cache_ttl_min: 300
-  cache_ttl_max: 86400
-  cache_optimistic: true
+  cache_size: 4194304
+  cache_ttl_min: 0
+  cache_ttl_max: 0
+  cache_optimistic: false
   edns_client_subnet:
     custom_ip: ""
     enabled: false
     use_custom: false
   max_goroutines: 300
-  handle_ddr: true
+  handle_ddr: false
+  use_private_ptr_resolvers: false
+  serve_plain_dns: true
 tls:
-  enabled: true
+  enabled: false
   server_name: "${DOMAIN}"
   force_https: false
   port_https: 0
-  port_dns_over_tls: 853
-  port_dns_over_quic: 853
+  port_dns_over_tls: 0
+  port_dns_over_quic: 0
   certificate_path: "${RAM_DIR}/cert.pem"
   private_key_path: "${RAM_DIR}/key.pem"
-# External filter lists are intentionally not fetched by the installer. Add
-# reviewed, pinned lists out-of-band if content filtering is required.
+filters: []
+whitelist_filters: []
+user_rules: []
+# Add reviewed filter lists out-of-band. No third-party lists are silently fetched.
 EOF
 
 for required in \
-    'querylog_enabled: false' \
-    'querylog_file_enabled: false' \
-    'statistics_interval: 0'; do
+    'querylog:' \
+    '  file_enabled: false' \
+    'statistics:'; do
     if ! grep -Fq "$required" "$AGH_CONFIG"; then
         echo "[-] AdGuard Home privacy setting missing: $required"
         exit 1
     fi
 done
 
-chown root:root "$AGH_DIR" "$AGH_DIR/AdGuardHome" "$AGH_CONFIG"
+chown root:root "$AGH_DIR" "$AGH_DIR/AdGuardHome"
+chown root:"$FORTRESS_USER" "$AGH_CONFIG"
 chmod 0755 "$AGH_DIR" "$AGH_DIR/AdGuardHome"
-chmod 0644 "$AGH_CONFIG"
+chmod 0640 "$AGH_CONFIG"
 chown "$FORTRESS_USER:$FORTRESS_USER" "$AGH_DATA_DIR" "${RAM_DIR}/adguard"
 
 cat <<EOF > /etc/systemd/system/adguard-home.service
 [Unit]
 Description=AdGuard Home: Volatile query-log-disabled DNS Engine
-After=network.target wg-quick@wg0.service
-Requires=wg-quick@wg0.service
+After=network.target fortress-init.service wg-quick@wg0.service
+Requires=fortress-init.service wg-quick@wg0.service
+RequiresMountsFor=${RAM_DIR} ${AGH_DATA_DIR}
 
 [Service]
 Type=simple
 User=${FORTRESS_USER}
 Group=${FORTRESS_USER}
 WorkingDirectory=/opt/AdGuardHome
-ExecStart=/opt/AdGuardHome/AdGuardHome -c /opt/AdGuardHome/AdGuardHome.yaml -w /opt/AdGuardHome
+ExecStart=/opt/AdGuardHome/AdGuardHome -c ${RAM_DIR}/adguard/AdGuardHome.yaml -w ${RAM_DIR}/adguard
 Restart=always
 RestartSec=3
 StandardOutput=null
@@ -410,7 +417,10 @@ CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 LimitNOFILE=65535
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=${AGH_DATA_DIR} ${RAM_DIR}
+ReadWritePaths=${RAM_DIR}/adguard
+NoNewPrivileges=true
+LimitCORE=0
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target
@@ -420,10 +430,6 @@ systemctl daemon-reload
 systemctl stop unbound 2>/dev/null || true
 systemctl disable unbound 2>/dev/null || true
 systemctl enable adguard-home
-AGH_CONFIG_IMMUTABLE="not enforced"
-if command -v chattr >/dev/null 2>&1 && chattr +i "$AGH_CONFIG" 2>/dev/null; then
-    AGH_CONFIG_IMMUTABLE="enforced"
-fi
 echo "[+] AdGuard Home configured; it will start after WireGuard creates 10.8.0.1."
 
 # 9. Generate hardened Sing-box configuration (IPv4-bound reference profile)
@@ -558,8 +564,13 @@ cat <<EOF > "$RAM_DIR/config.json"
     "auto_detect_interface": true,
     "rules": [
       {
-        "protocol": "dns",
+        "ip_cidr": ["10.8.0.1/32", "127.0.0.1/32"],
+        "port": 5335,
         "outbound": "direct"
+      },
+      {
+        "ip_is_private": true,
+        "action": "reject"
       },
       {
         "inbound": ["vless-reality-in", "hy2-sal-in", "hy2-std-in", "tuic-in", "ss-in"],
@@ -578,8 +589,8 @@ chown -R "$FORTRESS_USER:$FORTRESS_USER" "$RAM_DIR"
 cat <<EOF > /etc/systemd/system/fortress-core.service
 [Unit]
 Description=Sovereign Fortress Core Multi-Protocol Engine (Sing-box)
-After=network.target network-online.target adguard-home.service
-Wants=adguard-home.service
+After=network.target network-online.target fortress-init.service adguard-home.service
+Requires=fortress-init.service adguard-home.service
 
 [Service]
 Type=simple
@@ -620,7 +631,8 @@ EOF
 cat <<EOF > /etc/systemd/system/fortress-wstunnel.service
 [Unit]
 Description=Sovereign Fortress WireGuard over TCP (wstunnel)
-After=network.target fortress-core.service
+After=network.target fortress-init.service wg-quick@wg0.service
+Requires=fortress-init.service wg-quick@wg0.service
 
 [Service]
 Type=simple
@@ -660,7 +672,9 @@ cp -f /usr/local/bin/fortress-sub.py "${DISK_DIR}/fortress-sub.py" 2>/dev/null |
 cat <<EOF > /etc/systemd/system/fortress-sub.service
 [Unit]
 Description=Sovereign Fortress HTTPS Subscription & Web Portal Daemon
-After=network.target fortress-core.service
+After=network.target fortress-init.service fortress-core.service
+Requires=fortress-init.service
+RequiresMountsFor=${RAM_DIR} ${STATE_DIR}
 
 [Service]
 Type=simple
@@ -681,7 +695,10 @@ ProtectHome=true
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 ReadOnlyPaths=${DISK_DIR}
-ReadWritePaths=${RAM_DIR}
+ReadWritePaths=${RAM_DIR} ${STATE_DIR}
+LimitCORE=0
+PrivateTmp=true
+MemoryMax=256M
 
 [Install]
 WantedBy=multi-user.target
@@ -703,94 +720,14 @@ EOF
 chmod 600 "$DISK_DIR/wg0.conf"
 chown root:root "$DISK_DIR/wg0.conf"
 
-cat <<'EOF' > /usr/local/bin/fortress-init.sh
-#!/usr/bin/env bash
-set -euo pipefail
-
-RAM_DIR="/run/fortress"
-DISK_DIR="/etc/fortress"
-FORTRESS_USER="fortress"
-ADMIN_USER="${FORTRESS_ADMIN_USER:-$(id -un 1000 2>/dev/null || true)}"
-ADMIN_USER="${ADMIN_USER:-ubuntu}"
-
-# Ensure tmpfs mount on ${RAM_DIR}
-if ! mountpoint -q ${RAM_DIR}; then
-    mkdir -p ${RAM_DIR}
-    mount -t tmpfs -o size=256M,mode=0755 tmpfs ${RAM_DIR}
-fi
-
-chmod 755 ${RAM_DIR}
-chown ${FORTRESS_USER}:${FORTRESS_USER} ${RAM_DIR}
-
-mkdir -p ${RAM_DIR}/client
-chown ${FORTRESS_USER}:${FORTRESS_USER} ${RAM_DIR}/client
-chmod 700 ${RAM_DIR}/client
-
-# WireGuard directory strictly owned by root:root 0700
-mkdir -p ${RAM_DIR}/wireguard
-chown root:root ${RAM_DIR}/wireguard
-chmod 700 ${RAM_DIR}/wireguard
-
-# Copy sealed configs into ephemeral volatile RAM
-cp -f ${DISK_DIR}/key.pem ${RAM_DIR}/key.pem 2>/dev/null || true
-cp -f ${DISK_DIR}/cert.pem ${RAM_DIR}/cert.pem 2>/dev/null || true
-cp -f ${DISK_DIR}/ca.crt ${RAM_DIR}/ca.crt 2>/dev/null || true
-cp -f ${DISK_DIR}/config.json.template ${RAM_DIR}/config.json 2>/dev/null || true
-cp -f ${DISK_DIR}/fortress_config.json ${RAM_DIR}/fortress_config.json 2>/dev/null || true
-cp -f ${DISK_DIR}/sub_token ${RAM_DIR}/sub_token 2>/dev/null || true
-cp -f ${DISK_DIR}/wg0.conf ${RAM_DIR}/wireguard/wg0.conf 2>/dev/null || true
-
-ADMIN_USER="${SUDO_USER:-$(id -un 1000 2>/dev/null || echo "ubuntu")}"
-AUTH_FILE="/home/${ADMIN_USER}/.google_authenticator"
-if [ ! -f "${AUTH_FILE}" ]; then
-    echo "[*] Generating fresh, unique TOTP 2FA secret for ${ADMIN_USER}..."
-    if command -v google-authenticator >/dev/null 2>&1; then
-        su - "${ADMIN_USER}" -c "google-authenticator -t -d -f -r 3 -R 30 -w 3 -q" || true
-    fi
-    if [ ! -f "${AUTH_FILE}" ]; then
-        NEW_TOTP=$(python3 -c "import secrets, base64; print(base64.b32encode(secrets.token_bytes(20)).decode('utf-8').rstrip('='))" 2>/dev/null || openssl rand -base64 15 | tr -dc 'A-Z2-7' | head -c 32)
-        echo "${NEW_TOTP}" > "${AUTH_FILE}"
-        echo '" RATE_LIMIT 3 30' >> "${AUTH_FILE}"
-        echo '" WINDOW_SIZE 3' >> "${AUTH_FILE}"
-        echo '" DISALLOW_REUSE' >> "${AUTH_FILE}"
-        echo '" TOTP_AUTH' >> "${AUTH_FILE}"
-        chown "${ADMIN_USER}:${ADMIN_USER}" "${AUTH_FILE}"
-        chmod 400 "${AUTH_FILE}"
-    fi
-fi
-
-if [ -f "${AUTH_FILE}" ]; then
-    head -n 1 "${AUTH_FILE}" > ${RAM_DIR}/totp_secret
-    cp -f ${RAM_DIR}/totp_secret ${DISK_DIR}/totp_secret 2>/dev/null || true
-    chmod 640 ${RAM_DIR}/totp_secret ${DISK_DIR}/totp_secret 2>/dev/null || true
-    chown ${FORTRESS_USER}:${FORTRESS_USER} ${RAM_DIR}/totp_secret ${DISK_DIR}/totp_secret 2>/dev/null || true
-fi
-
-chown ${FORTRESS_USER}:${FORTRESS_USER} ${RAM_DIR}/key.pem ${RAM_DIR}/cert.pem ${RAM_DIR}/config.json ${RAM_DIR}/fortress_config.json ${RAM_DIR}/sub_token 2>/dev/null || true
-chmod 600 ${RAM_DIR}/key.pem ${RAM_DIR}/sub_token 2>/dev/null || true
-chmod 644 ${RAM_DIR}/cert.pem ${RAM_DIR}/ca.crt ${RAM_DIR}/config.json 2>/dev/null || true
-chmod 640 ${RAM_DIR}/fortress_config.json 2>/dev/null || true
-
-# WireGuard config in RAM must remain strictly root:root 0600
-chown root:root ${RAM_DIR}/wireguard/wg0.conf
-chmod 600 ${RAM_DIR}/wireguard/wg0.conf
-
-# Ensure persistent wg0.conf is root:root 0600
-chown root:root ${DISK_DIR}/wg0.conf
-chmod 600 ${DISK_DIR}/wg0.conf
-
-# Ensure WireGuard symlink exists
-mkdir -p /etc/wireguard
-ln -sf ${RAM_DIR}/wireguard/wg0.conf /etc/wireguard/wg0.conf
-EOF
-chmod 0755 /usr/local/bin/fortress-init.sh
+install -m 0755 fortress-init.sh /usr/local/bin/fortress-init.sh
 
 cat <<EOF > /etc/systemd/system/fortress-init.service
 [Unit]
 Description=Sovereign Fortress RAM Runtime Initializer
-Before=fortress-core.service fortress-sub.service fortress-wstunnel.service
-DefaultDependencies=no
-RequiresMountsFor=/run
+Before=fortress-core.service fortress-sub.service fortress-wstunnel.service wg-quick@wg0.service adguard-home.service
+After=local-fs.target
+RequiresMountsFor=${RAM_DIR} ${STATE_DIR}
 
 [Service]
 Type=oneshot
@@ -801,7 +738,7 @@ RemainAfterExit=yes
 WantedBy=basic.target
 EOF
 
-# 14. Configure Linux Kernel BBR & Complete IPv6 Leak Elimination
+# 14. Configure the first-install IPv4-only server policy (not a client kill switch)
 cat <<EOF > /etc/sysctl.d/99-fortress.conf
 net.core.default_qdisc=fq
 net.ipv4.tcp_congestion_control=bbr
@@ -810,7 +747,7 @@ net.core.rmem_max=67108864
 net.core.wmem_max=67108864
 net.ipv4.tcp_rmem=4096 87380 33554432
 net.ipv4.tcp_wmem=4096 65536 33554432
-# Complete IPv6 Leak Elimination
+# IPv4-only server listeners; this does not control physical client interfaces
 net.ipv6.conf.all.disable_ipv6=1
 net.ipv6.conf.default.disable_ipv6=1
 net.ipv6.conf.lo.disable_ipv6=1
@@ -845,7 +782,13 @@ fi
 # Existing provider, kernel, backup, or pre-deployment logs are outside this
 # script's control and must be reviewed separately; no zero-log claim is made.
 
-# 15. Configure SSH 2FA Enforced Authentication (Google Authenticator TOTP)
+# 15. SSH policy changes are opt-in and require an independently enrolled admin.
+if [ "${FORTRESS_CONFIGURE_SSH_2FA:-0}" = "1" ]; then
+if [ -z "${FORTRESS_ADMIN_USER:-}" ] || ! id "$FORTRESS_ADMIN_USER" >/dev/null 2>&1 \
+    || [ ! -f "/home/${FORTRESS_ADMIN_USER}/.google_authenticator" ]; then
+    echo "[-] Enroll the specified admin in SSH 2FA and verify recovery access first."
+    exit 1
+fi
 echo "[*] Configuring SSH PAM Two-Factor Authentication..."
 mkdir -p /etc/ssh/sshd_config.d
 cat <<EOF > /etc/ssh/sshd_config.d/99-fortress-2fa.conf
@@ -881,6 +824,7 @@ findtime = 600
 EOF
 systemctl restart fail2ban || true
 systemctl enable fail2ban || true
+fi
 
 # 17. Configure Firewall (Direct iptables & Disable Inert UFW)
 echo "[*] Disabling inert UFW and configuring hardened iptables rules..."
@@ -907,7 +851,10 @@ iptables -C INPUT -i wg0 -d 10.8.0.1 -p udp -m multiport --dports 5335,853 -j AC
 # follows the live default interface rather than a hard-coded cloud name.
 iptables -N FORTRESS_FORWARD 2>/dev/null || true
 iptables -F FORTRESS_FORWARD
-iptables -A FORTRESS_FORWARD -d 169.254.169.254 -j DROP
+iptables -A FORTRESS_FORWARD -d 169.254.0.0/16 -j DROP
+iptables -A FORTRESS_FORWARD -d 10.0.0.0/8 -j DROP
+iptables -A FORTRESS_FORWARD -d 172.16.0.0/12 -j DROP
+iptables -A FORTRESS_FORWARD -d 192.168.0.0/16 -j DROP
 iptables -A FORTRESS_FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 iptables -A FORTRESS_FORWARD -i wg0 -o "$WAN_IF" -j ACCEPT
 iptables -A FORTRESS_FORWARD -i "$WAN_IF" -o wg0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
@@ -923,17 +870,15 @@ iptables -t mangle -C FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-m
 iptables -P INPUT DROP
 iptables -P FORWARD DROP
 iptables -P OUTPUT ACCEPT
-systemctl enable netfilter-persistent >/dev/null 2>&1 || true
-netfilter-persistent save >/dev/null 2>&1 || true
+systemctl enable netfilter-persistent >/dev/null
+netfilter-persistent save >/dev/null
 echo "[+] Hardened iptables rules ACTIVE (INPUT/FORWARD default DROP; egress: ${WAN_IF}) and persistent across reboot."
 
 # 18. Save Master Configuration Output & Client WireGuard Profiles
-# Initialize the volatile runtime once before taking the configuration snapshot
-# so a freshly generated TOTP is actually included in fortress_config.json.
-ADMIN_USER="${SUDO_USER:-$(id -un 1000 2>/dev/null || echo ubuntu)}"
-AUTH_FILE="/home/${ADMIN_USER}/.google_authenticator"
-/usr/local/bin/fortress-init.sh
-TOTP_SECRET_VAL=$(head -n 1 "${AUTH_FILE}" 2>/dev/null || true)
+# Build the persistent templates before running the boot initializer.
+# Never distribute SSH PAM enrollment material with VPN client settings.
+# Portal enrollment is separate from SSH; never export the SSH seed to clients.
+# Enable portal_totp_required only after separately enrolling a portal seed.
 cat <<EOF > "$DISK_DIR/fortress_config.json"
 {
   "server_ip": "${SERVER_IP}",
@@ -941,7 +886,7 @@ cat <<EOF > "$DISK_DIR/fortress_config.json"
   "sub_port": 8443,
   "dns_port": 5335,
   "token": "${SUB_TOKEN}",
-  "totp_secret": "${TOTP_SECRET_VAL}",
+  "portal_totp_required": false,
   "uuid": "${UUID}",
   "reality_pubkey": "${REALITY_PUB}",
   "reality_shortid": "${REALITY_SHORTID}",
@@ -958,8 +903,10 @@ cat <<EOF > "$DISK_DIR/fortress_config.json"
 }
 EOF
 cp "$DISK_DIR/fortress_config.json" "$RAM_DIR/fortress_config.json"
-printf '%s\n' "$SUB_TOKEN" > "$DISK_DIR/sub_token"
-cp "$DISK_DIR/sub_token" "$RAM_DIR/sub_token"
+printf '%s\n' "$SUB_TOKEN" > "$STATE_DIR/sub_token"
+chown "$FORTRESS_USER:$FORTRESS_USER" "$STATE_DIR/sub_token"
+chmod 600 "$STATE_DIR/sub_token"
+cp "$STATE_DIR/sub_token" "$RAM_DIR/sub_token"
 
 # Native WireGuard Client Profile
 cat <<EOF > "$RAM_DIR/fortress-wireguard.conf"
@@ -996,11 +943,14 @@ EOF
 chown root:"$FORTRESS_USER" "$DISK_DIR"
 chmod 750 "$DISK_DIR"
 chmod 600 "$DISK_DIR"/*
-chown "$FORTRESS_USER:$FORTRESS_USER" "$DISK_DIR/sub_token"
-chmod 600 "$DISK_DIR/sub_token"
-chown -R "$FORTRESS_USER:$FORTRESS_USER" "$RAM_DIR"
+chown "$FORTRESS_USER:$FORTRESS_USER" "$RAM_DIR"/key.pem "$RAM_DIR"/cert.pem "$RAM_DIR"/ca.crt "$RAM_DIR"/config.json "$RAM_DIR"/fortress_config.json "$RAM_DIR"/sub_token
+chmod 600 "$RAM_DIR"/config.json "$RAM_DIR"/fortress_config.json "$RAM_DIR"/sub_token
+chown root:root "$RAM_DIR/wireguard/wg0.conf"
+chmod 600 "$RAM_DIR/wireguard/wg0.conf"
 
 # 19. Enable and Start Systemd Services
+/usr/local/bin/fortress-init.sh
+/usr/local/bin/sing-box check -c "$RAM_DIR/config.json"
 systemctl daemon-reload
 systemctl enable fortress-init fortress-core fortress-wstunnel fortress-sub wg-quick@wg0
 systemctl restart fortress-init fortress-core fortress-wstunnel fortress-sub wg-quick@wg0
@@ -1017,15 +967,10 @@ echo "[+] TUIC v5:            UDP 9443 (0-RTT Native QUIC)"
 echo "[+] Shadowsocks:        TCP/UDP 10443 (2022-blake3-aes-256-gcm)"
 echo "[+] Native WireGuard:   UDP 51820 (Kernel Line-Rate)"
 echo "[+] WireGuard-over-TCP: TCP 8080 (wstunnel TLS 1.3)"
-echo "[+] Universal Sub (HTTPS): https://${DOMAIN}:8443/sub/${SUB_TOKEN}"
-echo "[+] Traffic-Only Sub:     https://${DOMAIN}:8443/sub/${SUB_TOKEN}?mode=traffic-only"
+echo "[+] Subscription URLs:   construct locally from the private config; never print bearer tokens."
 echo "[+] Web Portal (HTTPS):   https://${DOMAIN}:8443/portal"
 echo "[+] DNS:                 127.0.0.1:5335 & 10.8.0.1:5335 (AdGuard query logs/statistics disabled; host visibility remains deployment-dependent)"
-echo "[+] Master Token:       ${SUB_TOKEN}"
-if [ -n "${TOTP_SECRET_VAL}" ]; then
-    echo "[+] 2FA Secret Key:     ${TOTP_SECRET_VAL}"
-    echo "[+] 2FA Setup URI:      otpauth://totp/${ADMIN_USER}@${SERVER_IP}?secret=${TOTP_SECRET_VAL}&issuer=SovereignFortress"
-fi
+echo "[+] Credentials:        private operator files only; no tokens or TOTP seeds printed."
 echo "[+] Sandboxing:         Dedicated unprivileged user 'fortress' + Systemd Strict"
 echo "[+] Firewall:           iptables & netfilter-persistent Active (Default Drop Enforced)"
 echo "[+] Master Config:      ${DISK_DIR}/fortress_config.json"

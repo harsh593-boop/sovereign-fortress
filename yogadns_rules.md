@@ -16,9 +16,14 @@ Applications -> Sing-box TUN -> selected proxy -> VPS
 DNS hijack   -> 10.8.0.1:5335 through the selected proxy -> AdGuard Home
 ```
 
+DoH/DoT configured inside applications may still use their own provider through
+the tunnel. Full-Tunnel does not magically force encrypted application DNS
+through AdGuard or make DNS-based ad blocking universal.
+
 The client profile must not use `127.0.0.1:5335` for the VPS resolver. On
 Windows, `127.0.0.1` means the Windows client itself. The reference profile
-uses `tcp://10.8.0.1:5335` with a proxy detour; that address is private to the
+uses a typed TCP server (`server: 10.8.0.1`, `server_port: 5335`) with
+`detour: proxy` in 1.14, or `tcp://10.8.0.1:5335` in explicit legacy 1.11 profiles; that address is private to the
 server's WireGuard interface and is reached after the proxy connection
 terminates on the VPS.
 
@@ -33,8 +38,10 @@ For this mode:
 5. Verify that the tunnel endpoint itself is excluded from the TUN route to
    avoid a route loop.
 
-The server installer configures AdGuard Home with query logging and statistics
-disabled and places its data directory on a checked `tmpfs`. This minimizes
+The server uses AdGuard's actual root-level `querylog` and `statistics` settings,
+with `enabled: false` and `querylog.file_enabled: false`. Its writable config
+and working data are under `/run/fortress/adguard` on checked `tmpfs`; a
+root-owned template restores that policy at boot. This minimizes
 local application persistence. It cannot prevent host, kernel, cloud-provider,
 backup, upstream-DNS, or administrator observation.
 
@@ -48,6 +55,11 @@ DNS egress mechanism. It currently provides direct handling for:
 - common ports such as 53, 853, and 5353;
 - configured provider domain suffixes; and
 - RFC1918/private destinations and configured campus domains.
+
+The 1.14 profile sets `dns_mode: disabled`, so TUN does not intentionally replace
+native DNS settings. The legacy profile cannot express that 1.14 feature.
+Provider exceptions are constrained to DNS-specific names and relevant ports;
+`cloudflared` is not a blanket bypass because it can carry non-DNS tunnels.
 
 All other traffic falls back to the proxy. In particular, a JSON route cannot
 reliably distinguish arbitrary HTTPS web traffic from DoH on TCP 443. It also

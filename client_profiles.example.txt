@@ -1,7 +1,7 @@
 ================================================================================
           SOVEREIGN FORTRESS: REFERENCE CLIENT PROFILES (2026)
 ================================================================================
-Server IP: <YOUR_SERVER_IP> (Oracle Cloud Mumbai - 100% Always Free Tier)
+Server IP: <YOUR_SERVER_IP> (operator-controlled VM; pricing and region vary)
 Architecture: Selected volatile runtime state, conservative service logging, BBR tuning
 Engine: Sing-box 1.11+ Core (Fully Hardened Schema & Decoy Masquerading)
 Defense: Google Authenticator 2FA PAM, Active Reality Mirroring, DPAPI Vault

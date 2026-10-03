@@ -43,6 +43,9 @@ if "--offline" in sys.argv:
     ]
     print(f"OFFLINE VERIFICATION: {sum(checks)} passed / {len(checks)} checks")
     sys.exit(0 if all(checks) else 1)
+if "--legacy-live" not in sys.argv:
+    print("Legacy live checks are not release evidence. Use server_smoke_checks.py and the offline HTTPS tests.")
+    sys.exit(2)
 CONFIG = {}
 if os.path.exists(CONFIG_PATH):
     try:

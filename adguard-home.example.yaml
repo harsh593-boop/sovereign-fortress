@@ -1,0 +1,80 @@
+# AdGuard Home v0.107.56 schema. Query logging and statistics are root sections.
+# Internal plaintext DNS is carried inside the encrypted VPN/proxy transport.
+schema_version: 29
+http:
+  address: 127.0.0.1:3000
+  pprof:
+    enabled: false
+    port: 6060
+users: []
+auth_attempts: 5
+block_auth_min: 15
+querylog:
+  enabled: false
+  file_enabled: false
+  interval: 24h
+  size_memory: 0
+statistics:
+  enabled: false
+  interval: 24h
+log:
+  enabled: false
+  file: ""
+  verbose: false
+dns:
+  bind_hosts:
+    - 127.0.0.1
+    - 10.8.0.1
+  port: 5335
+  anonymize_client_ip: true
+  ratelimit: 100
+  ratelimit_whitelist:
+    - 127.0.0.1
+    - 10.8.0.1
+  allowed_clients:
+    - 127.0.0.0/8
+    - 10.8.0.0/24
+  refuse_any: true
+  upstream_dns:
+    - tls://dns.quad9.net
+    - https://dns.quad9.net/dns-query
+  bootstrap_dns:
+    - 9.9.9.9
+  upstream_mode: load_balance
+  upstream_timeout: 10s
+  cache_size: 4194304
+  cache_ttl_min: 0
+  cache_ttl_max: 0
+  cache_optimistic: false
+  use_private_ptr_resolvers: false
+  handle_ddr: false
+  serve_plain_dns: true
+  edns_client_subnet:
+    enabled: false
+    use_custom: false
+    custom_ip: ""
+  max_goroutines: 300
+tls:
+  enabled: false
+  port_https: 0
+  port_dns_over_tls: 0
+  port_dns_over_quic: 0
+  port_dnscrypt: 0
+  allow_unencrypted_doh: false
+filters: []
+whitelist_filters: []
+user_rules: []
+filtering:
+  protection_enabled: true
+  filtering_enabled: true
+  filters_update_interval: 0
+  parental_enabled: false
+  safebrowsing_enabled: false
+clients:
+  runtime_sources:
+    whois: false
+    arp: false
+    rdns: false
+    dhcp: false
+    hosts: false
+  persistent: []

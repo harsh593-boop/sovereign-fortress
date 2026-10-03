@@ -12,6 +12,9 @@ on:
 permissions:
   contents: read
 
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+
 jobs:
   privacy-audit:
     name: Scan worktree and Git objects
@@ -20,12 +23,13 @@ jobs:
 
     steps:
       - name: Checkout repository history
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.11'
 
@@ -35,6 +39,39 @@ jobs:
           # bytecode containing the synthetic fixture values used by tests.
           PYTHONDONTWRITEBYTECODE: '1'
         run: python -m unittest discover -s tests -v
+
+      - name: Offline checks and shell validation
+        run: |
+          python comprehensive_verification.py --offline
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          for path in list(Path('.').glob('*.py')) + list(Path('.').glob('*.pyw')):
+              ast.parse(path.read_text(encoding='utf-8'), filename=path.name)
+          PY
+          bash -n deploy_server.sh fortress-init.sh
+          shellcheck deploy_server.sh fortress-init.sh
+
+      - name: Validate versioned profiles with checksum-pinned engines
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools=$(mktemp -d)
+          trap 'rm -rf "$tools"' EXIT
+          for version in 1.11.4 1.14.2; do
+            case "$version" in
+              1.11.4) hash=0bb762ef286b36c2016d9107fc1f089be7a75f6d579b33f067d31e696c05927e ;;
+              1.14.2) hash=a684484d7477d1437282ee411f4d131d0340aaad60a7868841ebd5d87dd8a0c6 ;;
+            esac
+            file="sing-box-${version}-linux-amd64.tar.gz"
+            curl --proto '=https' -fSL --retry 2 --connect-timeout 15 --max-time 180 \
+              "https://github.com/SagerNet/sing-box/releases/download/v${version}/${file}" -o "$tools/$file"
+            printf '%s  %s\n' "$hash" "$tools/$file" | sha256sum -c -
+            tar -xzf "$tools/$file" -C "$tools"
+          done
+          python validate_profiles.py \
+            --legacy "$tools/sing-box-1.11.4-linux-amd64/sing-box" \
+            --current "$tools/sing-box-1.14.2-linux-amd64/sing-box"
 
       - name: Scan the complete worktree and local Git blobs
         run: python check_repo_privacy.py

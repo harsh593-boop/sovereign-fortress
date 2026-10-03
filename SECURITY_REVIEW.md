@@ -1,79 +1,160 @@
-# Security remediation status (local, unverified)
+# Security remediation and release status
 
-The current checkout is **not production-ready**. No remote VPN service,
-Windows firewall, Hiddify runtime configuration, or user credentials were
-changed by this review. The public GitHub `main` history was replaced with an
-orphaned sanitized reference commit; this does not rotate previously exposed
-credentials or invalidate existing clones. A successful offline unit test is
-not evidence of a leak-free deployment.
+**Not production-ready.** This report distinguishes checked fixes from untested
+protection claims. It intentionally excludes deployment addresses, hostnames,
+credentials, private profiles, and raw diagnostic logs.
 
-## Local changes prepared
+## Remediated and checked
 
-- Subscription service requires TLS at the socket, uses Secure session cookies,
-  and no longer embeds the SSH enrollment seed in dashboard HTML.
-- Fresh deployments persist the generated subscription token and explicit
-  endpoint domain into the runtime state used by the subscription daemon.
-- The installer verifies AdGuard's query-log/statistics settings and both
-  runtime data mounts are `tmpfs`; service stdout/stderr is not forwarded to
-  journald.
-- The portal and client guidance now describe traffic-only DNS as best-effort
-  and explicitly reject universal-DNS, zero-log, and persistent-kill-switch
-  claims.
-- Full-mode sample DNS targets the VPS private resolver address through a proxy
-  detour; it does not send plaintext DNS to a public server port.
-- Example profiles explicitly reject IPv6 while the TUN is running. This is
-  **not** a Windows kill switch when the process or tunnel stops.
-- AdGuard service waits for the WireGuard private interface; its data directory
-  is volatile and application query logging is disabled in the installer.
-- Installer refuses an existing deployment rather than silently rotating its
-  credentials. It requires an independently verified AdGuard archive checksum.
-- The privacy scanner checks ignored worktree artifacts and Git objects; its
-  findings are detection signals, not proof of anonymity or no logging.
+### Existing-server migration
 
-## Blocking issues before deployment
+`apply_server_remediation.py` is an explicit migration for the audited Sing-box
+1.11.4 deployment, not a replacement for VM recovery planning. It requires
+`--apply`, local reviewed scripts, root, and PyYAML. It creates root-only backups
+of changed files and IPv4 rules, validates before restart, and attempts rollback
+if service or bounded DNS checks fail. It does not reinstall the VM, change SSH,
+upgrade the OS, rotate endpoint credentials, or replace default firewall policies.
 
-1. **Rotate exposed secrets**: SSH key and TOTP seed, subscription tokens,
-   proxy credentials, WireGuard private keys, and any DNS-provider API tokens.
-   Check public releases, Git history, QR exports and cloud logs. Do not paste
-   replacement secrets into chat or commit them.
-2. **Do not run the installer against an existing VM.** It is a first-install
-   script, not a migration. Review changes on a disposable VM first and plan
-   service rollback, backups, certificate migration, and SSH recovery.
-3. **Full mode:** Validate that the selected proxy can reach the private DNS
-   endpoint and that the server is not exposing that resolver publicly. Check
-   AdGuard startup, upstream identity, querylog/statistics, journal, backups,
-   and OCI logging independently.
-4. **Traffic-only mode:** Generic client-local DNS egress for arbitrary DoH,
-   DoQ, DNSCrypt, embedded resolvers, Windows DoH, and ISP DNS is **not
-   implemented**. Provider-domain/port exceptions cannot make this guarantee.
-   A Windows WFP policy and packet-path verification are needed; Hiddify may
-   discard imported DNS, route, and TUN settings. The reference profile is
-   intentionally documented as best-effort rather than universal.
-5. **Client kill switch:** No persistent Windows WFP fail-closed rule is
-   installed. Test VPN-off, crash, reboot, sleep/wake, roaming, network change,
-   and IPv6 before relying on either mode. Browser proxy-only mode cannot
-   protect raw UDP/WebRTC.
-6. **Logging:** tmpfs, disabled AdGuard query log, suppressed service output,
-   and `chattr +i` do not prevent hypervisor observation, upstream DNS logging,
-   kernel logs, crash dumps, pre-existing journals, backups, or administrator
-   changes. No absolute zero-log or untraceable claim is valid.
-7. **Deployment correctness:** Fresh installs must be tested for token/domain
-   propagation and the installer must be run with LF line endings. The legacy
-   live verifier is stale and must not be used as release evidence.
-8. **GitHub:** The public `main` branch now contains the sanitized reference
-   tree, but previously exposed credentials must still be rotated and old
-   clones, releases, caches, and provider logs must be reviewed. Do not treat
-   the history rewrite as credential revocation.
+- AdGuard uses the actual root-level `querylog` / `statistics` sections:
+  query collection, query file logging, statistics, and application logging are
+  disabled. Obsolete `dns.querylog_*` keys were ineffective.
+- The management UI binds to loopback; DNS binds only to loopback and the private
+  WireGuard address, with client restrictions. Unused incoming DoT/DoQ listeners
+  are disabled. Existing encrypted upstreams and filter choices are preserved.
+- A root-owned persistent AdGuard template is restored into a writable RAM
+  config and working directory. This version rewrites config at startup and
+  fails if its active config is read-only; that failure was reproduced and fixed.
+- Query log files were absent in the new runtime at verification. A statistics
+  database can exist even with statistics disabled; file existence is not proof
+  of query collection. Working storage was verified as tmpfs.
+- Proxy destination policy resolves hostnames before rejecting private,
+  loopback, and metadata destinations, except the intended private DNS port.
+  Additive firewall rules also protect IPv4 metadata and private WireGuard DNS.
+- Services have suppressed output and core dumps, dependencies and resource
+  limits. Runtime/master files are permission-restricted; service binaries and
+  persistent templates are root-owned.
+- Durable subscription state is writable only in its dedicated state directory;
+  atomic token publication no longer silently claims success after a failed
+  persistent write or reverts to stale boot-restored RAM state.
 
-## Minimum release gate
+File-level rollback is **not** a VM/provider snapshot. Reboot recovery, provider
+logging, old journals, snapshots, swap, and full-disk encryption remain separate
+release gates. Existing data outside application runtime was not wiped.
 
-Run offline tests (`python3 -m unittest discover -s tests -v`),
-`python3 comprehensive_verification.py --offline`, Python compile,
-ShellCheck/bash syntax validation on a Linux host, `sing-box check` against
-both generated profiles with the pinned target version, and server unit tests.
-Then use an independent packet capture on the physical and tunnel interfaces
-to test TCP/UDP, WebRTC STUN, IPv4/IPv6, local DNS and arbitrary encrypted DNS,
-before/after tunnel failure. Record expected source and destination for each
-mode and reject the release on any mismatch. Do not use DNS leak-test resolver
-IPs alone as proof of the client's source address; inspect DNS-provider logs
-and actual egress packets as well.
+### Subscription/authentication
+
+- TLS handshakes occur in bounded workers with deadlines, not the accept loop.
+- Secure/HttpOnly/SameSite cookies have nonces, bounded signed timestamps,
+  session-bound CSRF, and revocation after token rotation.
+- Wrong origins/hosts, ambiguous request framing, Unicode credentials, unsupported
+  core versions/modes, and token-in-browser-GET authentication are rejected safely.
+- Responses minimize referrer/framing exposure; fake usage/quota headers are removed.
+- OTP-only subscription URLs and OTP-only portal login are retired. Optional
+  portal MFA requires both the token and a **separate** enrolled portal seed.
+  The SSH PAM seed is no longer copied/exported in VPN master settings.
+  Legacy seed copies were checked unreadable to the service; SSH authentication
+  itself was not changed. Portal MFA is opt-in, not automatically enrolled.
+- A stale private CA is embedded only when it verifies the active certificate;
+  otherwise normal system trust remains. TLS verification is never disabled.
+  Hysteria URI pins use the current leaf-certificate fingerprint, not an SPKI pin.
+
+This remains a single-owner design: the subscription/admin token grants broad
+access. Per-device credentials, separate admin/client privileges, durable MFA
+replay protection, and multi-user provisioning require further design/testing.
+
+### Client, DNS, and local storage
+
+- The DNS hijack rule is restricted to recognized DNS after sniffing. An
+  unconditional hijack could divert non-DNS application traffic into DNS handling.
+- Profiles are explicitly versioned: validated legacy 1.11.4 and current 1.14.2.
+  Current examples use typed DNS, reject actions, WireGuard endpoints, and 1.14
+  TUN DNS mode. Legacy fields removed by 1.14 are not silently reused.
+- Full-Tunnel captures IPv6 and rejects it while active; private VPS DNS uses a
+  proxy detour. This is not a persistent firewall kill switch.
+- Traffic-Only sets 1.14 `dns_mode: disabled`, narrows provider exceptions, and
+  removes a blanket `cloudflared` bypass. It is still best-effort, not universal.
+- Shadowsocks-2022 links follow SIP002 percent-encoding requirements. Common URI
+  subscriptions do not include unsupported desktop-only schemes.
+- The GUI no longer reports UDP availability from a send/TCP probe, claims vault
+  success after failure, or infers protection from configuration. Nested import
+  URLs and credentials are encoded; certificate trust needs independent review.
+- Private Windows settings/profiles live outside Git, with user-bound DPAPI.
+  The GUI can load an encrypted config in memory. Actual client bundles must
+  remain private; public examples are placeholders only.
+- Vault conversion verifies complete output before deleting a source, refuses
+  destination conflicts, uses correct native DPAPI/free signatures, and retains
+  recoverable copies on failure. PowerShell wrappers use the same implementation.
+- Vault/panic helpers do not enumerate unrelated SSH keys in Downloads. SSD,
+  memory, snapshot, and backup erasure is never promised.
+- wstunnel enables certificate verification explicitly. Native Sing-box can be
+  installed without starting TUN or changing OS DNS/firewall policy.
+
+### Repository/CI
+
+The scanner now detects private-key markers and GitHub token formats, fails on
+incomplete/missing Git scans, and interleaves Git blob requests/responses to avoid
+pipe deadlock. CI disables bytecode fixtures, pins action commits and engine
+archive hashes, and checks examples with the real supported engines. Archival
+live verification tools are opt-in and are not release evidence.
+
+History sanitization does not revoke leaked credentials or invalidate old clones,
+releases, caches, transcripts, and backups. Rotation was operator-confirmed;
+independent revocation across every previously exposed system is not proven here.
+
+## Evidence from this remediation pass
+
+| Check | Observed result |
+| --- | --- |
+| Standard-library offline regressions | 92 passed |
+| Offline policy verifier | 6/6 passed |
+| Actual pinned engine checks | 4 generated profiles + 2 current examples passed |
+| ShellCheck 0.11.0 / Bash syntax | Passed for installer and initializer |
+| Repository worktree + Git-object privacy scan | Passed; detection aid only |
+| Live server smoke checks | 37/37 passed, secrets omitted |
+| Live systemd unit verification | Passed |
+| Native Windows DPAPI / synthetic NTFS conversion | Passed |
+| Native Windows encrypted GUI config load | Passed |
+| Native Windows 1.14.2 real private-profile schema checks | Both passed; no TUN started |
+| Proxy-only HTTPS smoke from WSL, current client | 2/5 passed: standard Hysteria2 and Shadowsocks |
+| Proxy-only HTTPS smoke on VPS loopback, legacy client | 3/5 passed: standard Hysteria2, TUIC, Shadowsocks |
+| Loopback management access through successful proxies | Rejected |
+
+Reality and Salamander failed the tested HTTPS smoke on both paths. TUIC passed
+locally on the VPS but failed from the WSL path. Credential comparisons matched
+the running server and the Reality target resolved/reached TLS 1.3, but the
+remaining transport failures are **unresolved**, not dismissed as network faults.
+These smoke tests do not establish browser, WebRTC, UDP, or TUN failure safety.
+
+## Blocking release gates
+
+1. Diagnose the failing transports and test the automatic selector across real
+   destinations, UDP/TCP, MTUs, reconnects, and restricted/unrestricted networks.
+2. Establish a supported/maintained host OS and current server-core upgrade plan
+   with a VM snapshot, console recovery, SSH verification, and rollback. Legacy
+   host extended-security coverage and post-quantum SSH negotiation are unverified.
+3. Implement and test independent Windows WFP/firewall fail-closed behavior:
+   client crash, TUN removal, reboot, sleep/wake, roaming, interface changes, VPS
+   outage, and IPv6 reappearance. No such persistent policy was installed here.
+4. Capture physical/TUN interfaces in both modes; test WebRTC/STUN and real DNS
+   paths. Hiddify may rewrite imports. Node import or an HTTP IP test is not proof.
+5. Test YogaDNS/NextDNS, Windows native DoH, browser DoH, Android Private DNS,
+   DNSCrypt, DoQ, hard-coded resolvers and embedded DNS on actual devices.
+   Arbitrary HTTPS DoH cannot be universally classified from finite route rules.
+   Full-Tunnel encrypts its transit but does not force every application's
+   encrypted DNS through AdGuard or make same-domain ad blocking universal.
+6. Verify Linux/macOS/Android/iOS/router support and IPv6-only networks. Current
+   endpoint generation is IPv4-only. Do not label the bundle all-device compatible.
+7. Review provider/kernel/journal/SSH/application logging, older artifacts,
+   Hiddify caches, clipboard/memory/swap, disk encryption, backup encryption and
+   retention. Application flags and tmpfs cannot guarantee absolute zero logs.
+8. Test the first-install script on a disposable VM and the migration through a
+   real reboot/restore. Static checks do not prove a fresh install or recovery.
+
+## Official references
+
+- Sing-box migration: https://sing-box.sagernet.org/migration/
+- TUN routing/DNS limitations: https://sing-box.sagernet.org/configuration/inbound/tun/
+- WireGuard endpoint schema: https://sing-box.sagernet.org/configuration/endpoint/wireguard/
+- AdGuard v0.107.56 configuration source: https://github.com/AdguardTeam/AdGuardHome/tree/v0.107.56/internal (navigate to `home`, then `config.go`)
+- AdGuard configuration: https://adguard-dns.io/kb/adguard-home/configuration/
+- Shadowsocks-2022 URI requirements: https://shadowsocks.org/doc/sip002.html

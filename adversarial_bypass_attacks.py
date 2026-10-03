@@ -27,6 +27,10 @@ import urllib.request
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
+if "--legacy-live" not in sys.argv:
+    print("Archival live probes disabled by default; run controlled offline regressions instead.")
+    sys.exit(2)
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "fortress_config.json")
 CA_PATH = os.path.join(BASE_DIR, "ca.crt")

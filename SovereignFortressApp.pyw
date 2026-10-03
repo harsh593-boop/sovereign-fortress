@@ -17,6 +17,13 @@ import hashlib
 import struct
 import tkinter as tk
 from tkinter import ttk, messagebox
+from client_paths import client_config_path, client_directory
+from urllib.parse import quote
+
+
+def uri_host(host):
+    """Bracket IPv6 literals for URI authorities."""
+    return f"[{host}]" if ":" in host and not host.startswith("[") else host
 
 try:
     import qrcode
@@ -40,7 +47,7 @@ def generate_totp_code(secret_b32):
 
 # Dynamic Script & Workspace Directory
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE = os.path.join(APP_DIR, "fortress_config.json")
+CONFIG_FILE = str(client_config_path())
 
 # Fallback / Default configuration template
 CONFIG = {
@@ -58,24 +65,29 @@ CONFIG = {
     "ss_password": "<YOUR_SHADOWSOCKS_PASSWORD>"
 }
 
-if os.path.exists(CONFIG_FILE):
+if os.path.exists(CONFIG_FILE) or os.path.exists(CONFIG_FILE + '.enc'):
     try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            user_cfg = json.load(f)
-            CONFIG.update(user_cfg)
-    except Exception as e:
-        print(f"[-] Warning: Failed to load {CONFIG_FILE}: {e}")
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                user_cfg = json.load(f)
+        else:
+            from fortress_vault import dpapi_unprotect
+            with open(CONFIG_FILE + '.enc', 'rb') as f:
+                user_cfg = json.loads(dpapi_unprotect(f.read()).decode('utf-8'))
+        CONFIG.update(user_cfg)
+    except Exception:
+        print("[-] Client configuration could not be loaded; private details omitted.")
 
 SERVER_IP = CONFIG.get("server_ip", "<YOUR_SERVER_IP>")
 DOMAIN = CONFIG.get("domain", "")
 SUB_HOST = DOMAIN if (DOMAIN and not DOMAIN.startswith("<")) else SERVER_IP
 SUB_PORT = CONFIG.get("sub_port", 8443)
 TOKEN = CONFIG.get("token", "<YOUR_SUBSCRIPTION_TOKEN>")
-SUB_URL_HTTPS = f"https://{SUB_HOST}:{SUB_PORT}/sub/{TOKEN}"
+SUB_URL_HTTPS = f"https://{uri_host(SUB_HOST)}:{SUB_PORT}/sub/{quote(TOKEN, safe='')}"
 SUB_URL = SUB_URL_HTTPS
-SUB_URL_TRAFFIC_ONLY = f"https://{SUB_HOST}:{SUB_PORT}/sub/{TOKEN}?mode=traffic-only"
-HIDDIFY_DEEPLINK = f"hiddify://import/{SUB_URL}#SovereignFortress"
-PORTAL_URL = f"https://{SUB_HOST}:{SUB_PORT}/portal"
+SUB_URL_TRAFFIC_ONLY = f"{SUB_URL_HTTPS}?mode=traffic-only"
+HIDDIFY_DEEPLINK = f"hiddify://import/{quote(SUB_URL, safe='')}#SovereignFortress"
+PORTAL_URL = f"https://{uri_host(SUB_HOST)}:{SUB_PORT}/portal"
 
 UUID = CONFIG.get("uuid", "<YOUR_UUID>")
 REALITY_PUBKEY = CONFIG.get("reality_pubkey", "<YOUR_REALITY_PUBLIC_KEY>")
@@ -84,8 +96,11 @@ REALITY_SNI = CONFIG.get("reality_sni", "gateway.icloud.com")
 HY2_PASSWORD = CONFIG.get("hy2_password", "<YOUR_HYSTERIA2_PASSWORD>")
 SALAMANDER_PASS = CONFIG.get("salamander_password", "<YOUR_SALAMANDER_PASSWORD>")
 SS_PASSWORD = CONFIG.get("ss_password", "<YOUR_SHADOWSOCKS_PASSWORD>")
-PIN_SHA256 = CONFIG.get("pin_sha256", "")
-pin_param = f"&pinSHA256={PIN_SHA256}" if PIN_SHA256 else ""
+CERT_SHA256 = CONFIG.get("cert_sha256", "")
+# URI pinSHA256 is the leaf-certificate fingerprint, not the SPKI pin.
+pin_param = f"&pinSHA256={quote(CERT_SHA256, safe='')}" if CERT_SHA256 else ""
+SERVER_URI_HOST = uri_host(SERVER_IP)
+TLS_NAME = quote(SUB_HOST, safe='')
 
 PROTOCOLS = [
     {
@@ -104,7 +119,7 @@ PROTOCOLS = [
         "port_num": 443,
         "badge": "TLS Masking & Edge SNI",
         "desc": "[TLS Masking & Edge Routing] — Encapsulates traffic using VLESS Reality with Apple CDN SNI; active non-proxy probes are routed to destination.",
-        "link": f"vless://{UUID}@{SERVER_IP}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni={REALITY_SNI}&fp=chrome&pbk={REALITY_PUBKEY}&sid={REALITY_SHORTID}&type=tcp&headerType=none#Fortress-Reality-TCP"
+        "link": f"vless://{quote(UUID, safe='')}@{SERVER_URI_HOST}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni={quote(REALITY_SNI, safe='')}&fp=chrome&pbk={quote(REALITY_PUBKEY, safe='')}&sid={quote(REALITY_SHORTID, safe='')}&type=tcp&headerType=none#Fortress-Reality-TCP"
     },
     {
         "name": "Fortress-Hysteria2-Salamander",
@@ -113,7 +128,7 @@ PROTOCOLS = [
         "port_num": 9444,
         "badge": "Scrambled QUIC Obfuscation",
         "desc": "[Scrambled QUIC Obfuscation] — ChaCha20 XOR packet header scrambler designed for high-loss wireless UDP channels.",
-        "link": f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:9444?sni=www.microsoft.com&alpn=h3&obfs=salamander&obfs-password={SALAMANDER_PASS}{pin_param}#Fortress-Hysteria2-Salamander"
+        "link": f"hysteria2://{quote(HY2_PASSWORD, safe='')}@{SERVER_URI_HOST}:9444?sni={TLS_NAME}&alpn=h3&obfs=salamander&obfs-password={quote(SALAMANDER_PASS, safe='')}{pin_param}#Fortress-Hysteria2-Salamander"
     },
     {
         "name": "Fortress-Hysteria2-Standard",
@@ -122,16 +137,16 @@ PROTOCOLS = [
         "port_num": 8443,
         "badge": "BBR Congestion Control",
         "desc": "[BBR Congestion Control] — Aggressive congestion control optimized for lossy wireless connections and high throughput.",
-        "link": f"hysteria2://{HY2_PASSWORD}@{SERVER_IP}:8443?sni=www.microsoft.com&alpn=h3{pin_param}#Fortress-Hysteria2-Standard"
+        "link": f"hysteria2://{quote(HY2_PASSWORD, safe='')}@{SERVER_URI_HOST}:8443?sni={TLS_NAME}&alpn=h3{pin_param}#Fortress-Hysteria2-Standard"
     },
     {
         "name": "Fortress-TUIC5",
         "port": "UDP 9443",
         "proto": "udp",
         "port_num": 9443,
-        "badge": "0-RTT Fast Mobile Roaming",
-        "desc": "[0-RTT Fast Mobile Roaming] — Zero handshake latency when switching between Wi-Fi access points or mobile data.",
-        "link": f"tuic://{UUID}:{HY2_PASSWORD}@{SERVER_IP}:9443?congestion_control=bbr&alpn=h3&sni=www.microsoft.com{pin_param}#Fortress-TUIC5-UDP"
+        "badge": "QUIC Transport",
+        "desc": "[QUIC Transport] — Roaming and reconnect behavior depend on network and client versions; latency is not guaranteed.",
+        "link": f"tuic://{quote(UUID, safe='')}:{quote(HY2_PASSWORD, safe='')}@{SERVER_URI_HOST}:9443?congestion_control=bbr&alpn=h3&sni={TLS_NAME}{pin_param}#Fortress-TUIC5-UDP"
     },
     {
         "name": "Fortress-Shadowsocks2022",
@@ -140,7 +155,7 @@ PROTOCOLS = [
         "port_num": 10443,
         "badge": "Ultra-Low Battery AEAD",
         "desc": "[Ultra-Low Battery AEAD] — Minimal CPU overhead and battery consumption on mobile (2022-blake3-aes-256-gcm).",
-        "link": f"ss://MjAyMi1ibGFrZTMtYWVzLTI1Ni1nY206{SS_PASSWORD}@{SERVER_IP}:10443#Fortress-Shadowsocks2022"
+        "link": f"ss://2022-blake3-aes-256-gcm:{quote(SS_PASSWORD, safe='')}@{SERVER_URI_HOST}:10443#Fortress-Shadowsocks2022"
     },
     {
         "name": "WireGuard over TCP (WSTunnel)",
@@ -149,7 +164,7 @@ PROTOCOLS = [
         "port_num": 8080,
         "badge": "TCP WebSocket Tunneling",
         "desc": "[TCP WebSocket Tunneling] — Wraps WireGuard inside HTTPS WebSockets (wstunnel) for strict TCP-only network environments.",
-        "link": f"wstunnel://{SERVER_IP}:8080?sni=www.microsoft.com&prefix=&tunnel=127.0.0.1:51820#Fortress-WireGuard-TCP"
+        "link": f"wstunnel://{SERVER_URI_HOST}:8080?sni={TLS_NAME}&prefix=&tunnel=127.0.0.1:51820#Fortress-WireGuard-TCP"
     },
     {
         "name": "Native WireGuard",
@@ -158,7 +173,7 @@ PROTOCOLS = [
         "port_num": 51820,
         "badge": "Direct Kernel Line-Rate",
         "desc": "[Direct Kernel Line-Rate] — Direct Linux kernel ChaCha20-Poly1305 processing for high-speed unrestricted LAN / WAN.",
-        "link": f"wg://{SERVER_IP}:51820"
+        "link": f"{SUB_URL}/wg"
     }
 ]
 
@@ -208,7 +223,7 @@ class SovereignApp(tk.Tk):
         # Status indicator
         status_box = tk.Frame(header_frame, bg="#111827", padx=12, pady=6, highlightthickness=1, highlightbackground="#10b981")
         status_box.pack(side="right")
-        dot_color = "#10b981" if not SERVER_IP.startswith("<") else "#fbbf24"
+        dot_color = "#fbbf24"  # A configured endpoint is not verified client protection.
         stat_text = "CONFIGURED — VERIFY" if not SERVER_IP.startswith("<") else "SETUP REQUIRED"
         self.status_dot = tk.Label(status_box, text="●", fg=dot_color, bg="#111827", font=("Segoe UI", 12))
         self.status_dot.pack(side="left", padx=(0, 6))
@@ -360,42 +375,25 @@ class SovereignApp(tk.Tk):
             lat = self._measure_latency(SERVER_IP, port, ptype)
             if lat is not None:
                 color = "#34d399" if lat < 80 else ("#fbbf24" if lat < 150 else "#38bdf8")
-                text = f"Probe: {lat:.0f} ms (ONLINE)"
+                text = f"TCP connect: {lat:.0f} ms (not VPN verification)"
             else:
                 color = "#38bdf8" if ptype == "udp" else "#ef4444"
-                text = "ACTIVE (UDP)" if ptype == "udp" else "TIMEOUT"
+                text = "UNVERIFIED (UDP handshake required)" if ptype == "udp" else "TCP CONNECT FAILED"
 
             self.after(0, lambda l=lbl, t=text, c=color: l.config(text=t, foreground=c))
 
     def _measure_latency(self, host, port, ptype):
+        # A UDP send proves neither delivery nor a protocol handshake. Do not
+        # send invalid packets or substitute an unrelated TCP/443 measurement.
+        if ptype != "tcp":
+            return None
         for attempt in range(2):
-            if ptype == "tcp":
-                try:
-                    t0 = time.time()
-                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    s.settimeout(3.5)
-                    s.connect((host, port))
-                    t1 = time.time()
-                    s.close()
-                    return (t1 - t0) * 1000.0
-                except Exception:
-                    time.sleep(0.2)
-            else:
-                try:
-                    # Measure true network round-trip latency to the server host while verifying UDP socket path
-                    t0 = time.time()
-                    s_udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                    s_udp.settimeout(1.5)
-                    s_udp.sendto(b"\x00\x00\x00\x00", (host, port))
-                    s_udp.close()
-
-                    s_tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    s_tcp.settimeout(2.5)
-                    s_tcp.connect((host, 443))
-                    t1 = time.time()
-                    s_tcp.close()
-                    return (t1 - t0) * 1000.0
-                except Exception:
+            try:
+                t0 = time.monotonic()
+                with socket.create_connection((host, port), timeout=3.5):
+                    return (time.monotonic() - t0) * 1000.0
+            except OSError:
+                if attempt == 0:
                     time.sleep(0.2)
         return None
 
@@ -420,7 +418,7 @@ class SovereignApp(tk.Tk):
 
         messagebox.showinfo(
             "Hiddify 1-Click Import",
-            "Universal Subscription Link is copied to your clipboard!\n\n"
+            "Versioned subscription link is copied to your clipboard!\n\n"
             "How to load into Hiddify:\n"
             "1. In Hiddify, click the '+' button in the top right.\n"
             "2. Click 'Add from Clipboard' (or press Ctrl+V).\n\n"
@@ -430,10 +428,10 @@ class SovereignApp(tk.Tk):
     def show_2fa_qr(self):
         totp_secret = CONFIG.get("totp_secret", "")
         if not totp_secret or totp_secret.startswith("<"):
-            messagebox.showwarning("2FA Not Configured", "No 2FA TOTP secret found in fortress_config.json.\nPlease check your configuration.")
+            messagebox.showwarning("2FA Not Configured", "No portal TOTP enrollment configured in the private client settings.\nPlease check your configuration.")
             return
 
-        otp_uri = f"otpauth://totp/ubuntu@{SERVER_IP}?secret={totp_secret}&issuer=SovereignFortress"
+        otp_uri = f"otpauth://totp/{quote('portal@' + SERVER_IP, safe='')}?secret={quote(totp_secret, safe='')}&issuer=SovereignFortress"
 
         win = tk.Toplevel(self)
         win.title("Sovereign Fortress — 2FA Authenticator Setup")
@@ -446,7 +444,7 @@ class SovereignApp(tk.Tk):
         hdr = tk.Label(win, text="2FA AUTHENTICATOR SETUP", font=("Segoe UI", 13, "bold"), fg="#818cf8", bg="#0b0f19")
         hdr.pack(pady=(16, 2))
 
-        sub = tk.Label(win, text="Scan with Google Authenticator, Aegis, 2FAS, or Bitwarden\nUsed for SSH (2222) and Web Portal",
+        sub = tk.Label(win, text="Scan with Google Authenticator, Aegis, 2FAS, or Bitwarden\nSeparate optional portal enrollment — never reuse the SSH seed",
                        font=("Segoe UI", 8), fg="#9ca3af", bg="#0b0f19", justify="center")
         sub.pack(pady=(0, 10))
 
@@ -609,7 +607,7 @@ class SovereignApp(tk.Tk):
         btn_close.pack(pady=8)
 
     def copy_all_proxies(self):
-        direct_links = [p["link"] for p in PROTOCOLS if p["port_num"] > 0]
+        direct_links = [p["link"] for p in PROTOCOLS if p["link"].startswith(("vless://", "hysteria2://", "tuic://", "ss://"))]
         text = "\n".join(direct_links)
         self.clipboard_clear()
         self.clipboard_append(text)
@@ -627,7 +625,7 @@ class SovereignApp(tk.Tk):
         self.clipboard_append(SUB_URL_HTTPS)
         messagebox.showinfo(
             "Copied",
-            f"Encrypted HTTPS Subscription URL copied to clipboard!\n\n{SUB_URL_HTTPS}\n\n"
+            "HTTPS subscription URL copied to clipboard; bearer token is not shown in this dialog.\n\n"
             "• Security: HTTPS only; certificate trust must be verified on this device\n"
             "• Windows: install the private CA only when you trust the deployment\n"
             "• Hiddify: Click '+' -> 'Add from Clipboard'\n\n"
@@ -643,48 +641,69 @@ class SovereignApp(tk.Tk):
         webbrowser.open(PORTAL_URL)
 
     def trust_root_ca(self):
-        ca_path = os.path.join(APP_DIR, "ca.crt")
+        ca_path = str(client_directory() / "ca.crt")
         if not os.path.exists(ca_path):
-            messagebox.showerror("Error", "ca.crt not found in application directory.")
+            messagebox.showerror("Error", "No private CA found in the private client directory. Publicly trusted deployments do not need a custom root CA.")
             return
-
         bat = os.path.join(APP_DIR, "Trust-Certificate.bat")
-        if os.path.exists(bat):
-            subprocess.Popen(["cmd.exe", "/c", "start", bat])
-        else:
-            cmd = f'Import-Certificate -FilePath "{ca_path}" -CertStoreLocation Cert:\\CurrentUser\\Root'
-            subprocess.Popen(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", cmd])
+        if not os.path.exists(bat):
+            messagebox.showerror("Error", "Trust-Certificate.bat not found; no certificate was imported.")
+            return
+        if not messagebox.askyesno(
+            "Root CA Trust — Security Decision",
+            "Trusting a root CA permits certificates it signs for ANY website, not just this VPN. "
+            "Only proceed if you control and trust this CA.\n\n"
+            "Obtain its SHA-256 certificate fingerprint from the administrator through an "
+            "independent trusted channel (not this downloaded folder). The helper will require "
+            "that fingerprint and explicit confirmation.\n\n"
+            "Continue to verification?"
+        ):
+            return
+        try:
+            subprocess.Popen(["cmd.exe", "/d", "/c", "Trust-Certificate.bat"], cwd=APP_DIR,
+                             creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
+        except OSError:
+            messagebox.showerror("Error", "Unable to start certificate verification; no certificate was imported.")
 
     def run_wstunnel(self):
         bat = os.path.join(APP_DIR, "start-wstunnel.bat")
         if os.path.exists(bat):
-            subprocess.Popen(["cmd.exe", "/c", "start", bat])
+            subprocess.Popen(["cmd.exe", "/d", "/c", "start-wstunnel.bat"], cwd=APP_DIR,
+                             creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
         else:
             messagebox.showerror("Error", "start-wstunnel.bat not found.")
 
-    def lock_vault(self):
+    def _run_vault(self, action):
         vault_py = os.path.join(APP_DIR, "fortress_vault.py")
-        if os.path.exists(vault_py):
-            res = subprocess.run([sys.executable, vault_py, "lock"], capture_output=True, text=True)
-            messagebox.showinfo("Vault Locked", "Client keys and credentials encrypted at rest using Windows User-Bound DPAPI (CryptProtectData)!\nOriginal plaintext files securely wiped.")
-        else:
+        if not os.path.exists(vault_py):
             messagebox.showerror("Error", "fortress_vault.py not found.")
+            return False
+        try:
+            # Never display captured output: it may identify private local files.
+            res = subprocess.run([sys.executable, vault_py, action],
+                                 input="VAPORIZE\n" if action == "shred" else "",
+                                 capture_output=True, text=True, encoding="utf-8",
+                                 errors="replace", timeout=120)
+        except (OSError, subprocess.SubprocessError):
+            messagebox.showerror("Vault Failed", "Vault operation could not complete. Some files may have changed; inspect their state before retrying.")
+            return False
+        if res.returncode != 0:
+            messagebox.showerror("Vault Failed", "Vault operation failed or was only partially completed. Preserve existing plaintext and .enc files; resolve conflicts before retrying.")
+            return False
+        return True
+
+    def lock_vault(self):
+        if self._run_vault("lock"):
+            messagebox.showinfo("Vault Lock Completed", "Vault lock operation completed using Windows user-bound DPAPI.\nPlaintext deletion does not guarantee erasure on SSDs or backups. Running apps may still hold credentials in memory.")
 
     def unlock_vault(self):
-        vault_py = os.path.join(APP_DIR, "fortress_vault.py")
-        if os.path.exists(vault_py):
-            res = subprocess.run([sys.executable, vault_py, "unlock"], capture_output=True, text=True)
-            messagebox.showinfo("Vault Unlocked", "Client keys and credentials decrypted for active VPN session.\nTip: Lock vault when not in active use.")
-        else:
-            messagebox.showerror("Error", "fortress_vault.py not found.")
+        if self._run_vault("unlock"):
+            messagebox.showinfo("Vault Unlock Completed", "Vault unlock operation completed for active use.\nTip: Lock vault when not in active use.")
 
     def panic_shred(self):
-        if messagebox.askyesno("Emergency Panic", "Are you SURE you want to perform multi-pass overwrite and cryptographic key erasure on all local credentials, keys, and configurations?\n\nThis action is irreversible!"):
-            vault_py = os.path.join(APP_DIR, "fortress_vault.py")
-            if os.path.exists(vault_py):
-                p = subprocess.Popen([sys.executable, vault_py, "shred"], stdin=subprocess.PIPE, text=True)
-                p.communicate(input="VAPORIZE\n")
-                messagebox.showwarning("Keys Erased", "All local credentials have undergone multi-pass overwrite and key erasure.")
+        if messagebox.askyesno("Emergency Panic", "Perform best-effort overwrite and deletion of local credentials and configurations?\n\nThis cannot guarantee erasure on SSDs, snapshots, backups, or in memory. Deletion is irreversible; stop active clients separately."):
+            if self._run_vault("shred"):
+                messagebox.showwarning("Removal Completed", "Best-effort file removal completed. Physical erasure is not guaranteed; active apps and backups may retain credentials.")
 
 if __name__ == "__main__":
     app = SovereignApp()

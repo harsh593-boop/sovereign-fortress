@@ -91,6 +91,46 @@ class PrivacyScannerTests(unittest.TestCase):
         self.assertNotIn(configured, output.getvalue())
         self.assertIn("redacted", output.getvalue().lower())
 
+    def test_private_key_and_github_tokens_are_detected_in_ordinary_text(self) -> None:
+        repository = self.make_repository()
+        self.addCleanup(lambda: __import__('shutil').rmtree(repository, ignore_errors=True))
+        marker = '-----BEGIN ' + 'OPENSSH PRIVATE KEY-----'
+        token = 'gh' + 'p_' + ('a' * 36)
+        (repository / 'notes.txt').write_text(marker + '\n' + token)
+        findings = check_repo_privacy.scan_repository(repository, include_history=False)
+        self.assertTrue(any(f.reason == 'Private key PEM marker' for f in findings))
+        self.assertTrue(any(f.reason == 'GitHub token format' for f in findings))
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            check_repo_privacy._print_report(findings)
+        self.assertNotIn(token, output.getvalue())
+        self.assertNotIn(marker, output.getvalue())
+
+    def test_large_object_batch_completes_without_pipe_deadlock(self) -> None:
+        repository = self.make_repository()
+        self.addCleanup(lambda: __import__('shutil').rmtree(repository, ignore_errors=True))
+        # Unique blobs exceed the Git request pipe capacity. No secret fixtures.
+        for index in range(2200):
+            (repository / f'fixture-{index}.txt').write_text(f'safe fixture {index}\n')
+        git(repository, 'add', '.')
+        git(repository, 'commit', '-m', 'many synthetic blobs')
+        result = subprocess.run([sys.executable, str(REPOSITORY / 'check_repo_privacy.py'),
+                                 '--root', str(repository)], capture_output=True, timeout=30)
+        self.assertEqual(result.returncode, 0)
+
+    def test_missing_root_is_not_reported_as_a_clean_scan(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            findings = check_repo_privacy.scan_repository(Path(directory) / 'missing')
+        self.assertTrue(any(f.source == 'scan' for f in findings))
+
+    def test_failed_git_history_scan_is_not_reported_as_clean(self) -> None:
+        from unittest.mock import patch
+        repository = self.make_repository()
+        self.addCleanup(lambda: __import__('shutil').rmtree(repository, ignore_errors=True))
+        with patch.object(check_repo_privacy, '_history_object_ids', side_effect=check_repo_privacy.ScanFailure('fixture')):
+            findings = check_repo_privacy.scan_repository(repository)
+        self.assertTrue(any(f.path == '[Git history]' and f.source == 'scan' for f in findings))
+
     def test_clean_repository_passes_without_unqualified_claims(self) -> None:
         repository = self.make_repository()
         self.addCleanup(lambda: __import__("shutil").rmtree(repository, ignore_errors=True))

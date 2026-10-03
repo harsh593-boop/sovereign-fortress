@@ -3,8 +3,8 @@
 Sovereign Fortress Dynamic Subscription & Access Control Daemon (2026 Enhanced)
 Port: 8443 (TCP)
 Security: volatile runtime support, conservative application logging, rate limiting, and active-defense redirection
-Supports: Hiddify App (Universal Sing-box 1.11+ JSON & Base64), 2FA TOTP Authentication,
-          Direct TOTP-in-path (/sub/<TOTP>), Dynamic Rotating Token, Self-Contained Offline QR Engine
+Supports: versioned Sing-box profiles, TLS bearer subscriptions, optional separate
+          portal second factor, durable token rotation, self-contained QR assets
 """
 
 import os
@@ -21,6 +21,11 @@ import posixpath
 import ssl
 import socket
 import threading
+import tempfile
+import subprocess
+import re
+import ipaddress
+import html as html_escape
 from http.cookies import SimpleCookie
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
@@ -29,9 +34,12 @@ from socketserver import ThreadingMixIn
 RAM_DIR = "/run/fortress"
 DISK_DIR = "/etc/fortress"
 TOKEN_RAM = os.path.join(RAM_DIR, "sub_token")
-TOKEN_DISK = os.path.join(DISK_DIR, "sub_token")
-TOTP_SECRET_FILE = os.path.join(RAM_DIR, "totp_secret")
-FALLBACK_TOTP_FILE = os.path.join(DISK_DIR, "totp_secret")
+STATE_DIR = "/var/lib/fortress/subscription"
+TOKEN_DISK = os.path.join(STATE_DIR, "sub_token")
+TOKEN_LEGACY = os.path.join(DISK_DIR, "sub_token")
+TOKEN_LOCK = threading.RLock()
+# Portal enrollment must never reuse the SSH PAM seed.
+TOTP_SECRET_FILE = os.path.join(STATE_DIR, "portal_totp_secret")
 
 # Dynamic Configuration Loader (No hardcoded credentials)
 OFFLINE_TEST_MODE = os.environ.get("FORTRESS_SUB_OFFLINE_TEST") == "1"
@@ -47,6 +55,7 @@ CONFIG = {
     "sub_port": 8443,
     "dns_port": 5335,
     "token": "",
+    "portal_totp_required": False,
     "uuid": "<YOUR_UUID>",
     "reality_pubkey": "<YOUR_REALITY_PUBLIC_KEY>",
     "reality_shortid": "<YOUR_REALITY_SHORT_ID>",
@@ -78,6 +87,7 @@ SERVER_IP = CONFIG.get("server_ip", "127.0.0.1")
 DOMAIN = CONFIG.get("domain", "")
 PORT = int(CONFIG.get("sub_port", 8443))
 DNS_PORT = int(CONFIG.get("dns_port", 5335))
+PORTAL_TOTP_REQUIRED = CONFIG.get("portal_totp_required", False) is True
 
 # The endpoint is an operator configuration value, not a certificate CN.
 # Certificates may deliberately use a decoy Common Name, so inferring the
@@ -318,7 +328,7 @@ DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
                     <button id="tab-full" class="btn btn-primary" onclick="setQR('full')">{{LOGO_SVG_SM}} Full Tunnel QR</button>
                     <button id="tab-traffic" class="btn btn-sec" onclick="setQR('traffic')">⚡ Traffic-Only QR</button>
                 </div>
-                <h2 id="qr-title">Universal Full Tunnel Subscription QR</h2>
+                <h2 id="qr-title">Versioned Full-Tunnel Subscription QR</h2>
                 <p id="qr-desc" style="color:#94a3b8; font-size:13px; margin-top:4px;">
                     Scan with <strong>Hiddify App</strong> on Android / iOS / Windows. Includes automatic
                     <strong>mode-specific routing</strong>: Full Tunnel sends public IPv4 through the VPS; Traffic-Only additionally bypasses configured local/private destinations. IPv6 is blocked by default.
@@ -427,7 +437,7 @@ DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
             var isFull = (mode === 'full');
             document.getElementById('tab-full').className = isFull ? 'btn btn-primary' : 'btn btn-sec';
             document.getElementById('tab-traffic').className = isFull ? 'btn btn-sec' : 'btn btn-primary';
-            document.getElementById('qr-title').innerText = isFull ? 'Universal Full Tunnel Subscription QR' : 'Universal Traffic-Only Subscription QR';
+            document.getElementById('qr-title').innerText = isFull ? 'Versioned Full-Tunnel Subscription QR' : 'Versioned Traffic-Only Subscription QR';
             document.getElementById('qr-desc').innerText = isFull ? 'Configured VPS DNS + Full IPv4 Proxy (server logging remains deployment-dependent).' : 'Best-effort local DNS exceptions + traffic proxy; arbitrary encrypted DNS requires Windows WFP enforcement.';
             var targetUrl = isFull ? fullSubUrl : trafficSubUrl;
             document.getElementById('qr-url-text').innerText = targetUrl;
@@ -484,7 +494,7 @@ DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
 All old links will immediately stop working!")) return;
             fetch('/portal/rotate-token', {
                 method: 'POST',
-                headers: { 'X-Fortress-CSRF': '1' }
+                headers: { 'X-Fortress-CSRF': '{{CSRF_TOKEN}}' }
             })
             .then(res => res.json())
             .then(data => {
@@ -500,50 +510,80 @@ All old links will immediately stop working!")) return;
 </body>
 </html>"""
 def _is_valid_subscription_token(value: object) -> bool:
-    return (
-        isinstance(value, str)
-        and value.startswith("ft_sec_")
-        and len(value) >= 16
-        and not value.startswith("<")
-    )
+    return isinstance(value, str) and re.fullmatch(r"ft_sec_[A-Za-z0-9_-]{24,64}", value) is not None
+
+
+def safe_compare(candidate, expected):
+    """Reject non-ASCII attacker input without compare_digest's TypeError."""
+    return (isinstance(candidate, str) and isinstance(expected, str)
+            and candidate.isascii() and expected.isascii()
+            and hmac.compare_digest(candidate, expected))
 
 
 def get_or_create_token():
-    # Runtime state wins after an intentional portal rotation.  On a fresh
-    # install, fall back to the operator-generated value in fortress_config so
-    # printed/client configuration URLs and the daemon use the same token.
-    for path in [TOKEN_RAM, TOKEN_DISK]:
-        if os.path.exists(path):
+    # Durable state wins over an old token restored into RAM by a boot script.
+    # The dedicated state directory is the only persistent writable service path.
+    with TOKEN_LOCK:
+        paths = [TOKEN_DISK, TOKEN_RAM]
+        if not OFFLINE_TEST_MODE:
+            paths.append(TOKEN_LEGACY)
+        for path in paths:
             try:
                 with open(path, "r", encoding="utf-8") as f:
-                    t = f.read().strip()
-                    if _is_valid_subscription_token(t):
-                        return t
-            except Exception:
-                pass
+                    token = f.read().strip()
+                if _is_valid_subscription_token(token):
+                    if path != TOKEN_DISK:
+                        save_token(token)
+                    return token
+                if path == TOKEN_DISK:
+                    raise RuntimeError("Durable token state is invalid; refusing stale credentials")
+            except FileNotFoundError:
+                continue
+            except UnicodeError:
+                if path == TOKEN_DISK:
+                    raise RuntimeError("Durable token state is unreadable; refusing stale credentials")
+                continue
+        token = CONFIG.get("token", "")
+        if not _is_valid_subscription_token(token):
+            token = "ft_sec_" + secrets.token_urlsafe(24)
+        save_token(token)
+        return token
 
-    configured_token = CONFIG.get("token", "")
-    if _is_valid_subscription_token(configured_token):
-        save_token(configured_token)
-        return configured_token
 
-    new_token = "ft_sec_" + secrets.token_urlsafe(24)
-    save_token(new_token)
-    return new_token
+def _atomic_token_write(path, token):
+    directory = os.path.dirname(path)
+    fd, temporary = tempfile.mkstemp(prefix=".token-", dir=directory)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(token)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        if hasattr(os, "O_DIRECTORY"):
+            dir_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
 
 def save_token(token_str):
-    for d in [RAM_DIR, DISK_DIR]:
-        if os.path.exists(d):
-            p = os.path.join(d, "sub_token")
-            try:
-                with open(p, "w", encoding="utf-8") as f:
-                    f.write(token_str.strip())
-                os.chmod(p, 0o600)
-            except Exception:
-                pass
+    if not _is_valid_subscription_token(token_str):
+        raise ValueError("Invalid subscription token format")
+    with TOKEN_LOCK:
+        # Fail rather than falsely reporting a successful non-persistent rotation.
+        _atomic_token_write(TOKEN_DISK, token_str)
+        try:
+            _atomic_token_write(TOKEN_RAM, token_str)
+        except OSError:
+            # Durable state remains authoritative if a RAM refresh fails.
+            pass
 
 def get_totp_secret():
-    for path in [TOTP_SECRET_FILE, FALLBACK_TOTP_FILE]:
+    for path in [TOTP_SECRET_FILE]:
         if os.path.exists(path):
             try:
                 with open(path, "r", encoding="utf-8") as f:
@@ -624,29 +664,30 @@ def clear_failed_attempts(ip: str):
             del FAILED_ATTEMPTS[ip]
 
 def create_session_cookie() -> str:
-    timestamp = str(int(time.time()))
-    payload = f"auth:{timestamp}"
+    payload = f"auth:{int(time.time())}:{secrets.token_urlsafe(18)}"
     sig = hmac.new(SESSION_SECRET, payload.encode(), hashlib.sha256).hexdigest()
     return f"{payload}:{sig}"
 
+
 def verify_session_cookie(cookie_str: str) -> bool:
-    if not cookie_str:
+    if not isinstance(cookie_str, str) or len(cookie_str) > 256 or not cookie_str.isascii():
         return False
     parts = cookie_str.split(":")
-    if len(parts) != 3 or parts[0] != "auth":
+    if len(parts) != 4 or parts[0] != "auth":
         return False
-    payload = f"{parts[0]}:{parts[1]}"
-    sig = parts[2]
+    payload = ":".join(parts[:3])
     expected = hmac.new(SESSION_SECRET, payload.encode(), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(sig, expected):
+    if not safe_compare(parts[3], expected):
         return False
     try:
-        created = int(parts[1])
-        if time.time() - created > 7200:
-            return False
-        return True
-    except Exception:
+        age = time.time() - int(parts[1])
+        return 0 <= age <= 7200
+    except ValueError:
         return False
+
+
+def session_csrf_token(session):
+    return hmac.new(SESSION_SECRET, ("csrf:" + session).encode(), hashlib.sha256).hexdigest()
 
 def get_session_cookie(header_value: str):
     """Return only the well-formed sf_session cookie from a Cookie header."""
@@ -678,46 +719,76 @@ def build_hiddify_link(subscription_url: str, label: str) -> str:
     encoded_label = urllib.parse.quote(label, safe="")
     return f"hiddify://import/{encoded_url}#{encoded_label}"
 
+def current_certificate_fingerprint():
+    for directory in (RAM_DIR, DISK_DIR):
+        try:
+            with open(os.path.join(directory, "cert.pem"), encoding="utf-8") as stream:
+                text = stream.read()
+            pem = re.search(r"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----", text, re.S)
+            if pem:
+                der = ssl.PEM_cert_to_DER_cert(pem.group())
+                return hashlib.sha256(der).hexdigest().upper()
+        except (OSError, ValueError):
+            continue
+    return CERT_SHA256
+
+
+def verified_private_ca():
+    """Never replace system trust with an old CA unrelated to the active leaf."""
+    for directory in (RAM_DIR, DISK_DIR):
+        ca = os.path.join(directory, "ca.crt")
+        cert = os.path.join(directory, "cert.pem")
+        try:
+            with open(ca, encoding="utf-8") as stream:
+                pem = stream.read().strip()
+            if "-----BEGIN CERTIFICATE-----" not in pem:
+                continue
+            if OFFLINE_TEST_MODE and not os.path.exists(cert):
+                return pem  # Synthetic validation fixture, not deployment trust.
+            result = subprocess.run(["openssl", "verify", "-CAfile", ca, cert],
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3)
+            if result.returncode == 0:
+                return pem
+        except (OSError, subprocess.SubprocessError):
+            continue
+    return None
+
+
 def get_protocol_links():
+    quote = lambda value: urllib.parse.quote(str(value), safe="")
     server_host = endpoint_host(SERVER_IP)
     domain_target = DOMAIN if (DOMAIN and not DOMAIN.startswith("<")) else SERVER_IP
-    pin_param = f"&pinSHA256={PIN_SHA256}" if (PIN_SHA256 and not DOMAIN) else ""
+    # Hysteria pinSHA256 is a certificate fingerprint, not the SPKI pin.
+    cert_fingerprint = current_certificate_fingerprint()
+    pin_param = f"&pinSHA256={quote(cert_fingerprint)}" if cert_fingerprint else ""
     vless = f"vless://{UUID}@{server_host}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni={REALITY_SNI}&fp=chrome&pbk={REALITY_PUBKEY}&sid={REALITY_SHORTID}&type=tcp&headerType=none#Fortress-Reality-TCP"
-    hy2_sal = f"hysteria2://{HY2_PASSWORD}@{server_host}:9444?sni={domain_target}&alpn=h3&obfs=salamander&obfs-password={SALAMANDER_PASSWORD}{pin_param}#Fortress-Hysteria2-Salamander"
-    hy2_std = f"hysteria2://{HY2_PASSWORD}@{server_host}:8443?sni={domain_target}&alpn=h3{pin_param}#Fortress-Hysteria2-Standard"
-    tuic = f"tuic://{UUID}:{HY2_PASSWORD}@{server_host}:9443?congestion_control=bbr&alpn=h3&sni={domain_target}{pin_param}#Fortress-TUIC5"
-    ss = f"ss://MjAyMi1ibGFrZTMtYWVzLTI1Ni1nY206{SS_PASSWORD}@{server_host}:10443#Fortress-Shadowsocks2022"
+    hy2_sal = f"hysteria2://{quote(HY2_PASSWORD)}@{server_host}:9444?sni={quote(domain_target)}&alpn=h3&obfs=salamander&obfs-password={quote(SALAMANDER_PASSWORD)}{pin_param}#Fortress-Hysteria2-Salamander"
+    hy2_std = f"hysteria2://{quote(HY2_PASSWORD)}@{server_host}:8443?sni={quote(domain_target)}&alpn=h3{pin_param}#Fortress-Hysteria2-Standard"
+    tuic = f"tuic://{quote(UUID)}:{quote(HY2_PASSWORD)}@{server_host}:9443?congestion_control=bbr&alpn=h3&sni={quote(domain_target)}{pin_param}#Fortress-TUIC5"
+    # SIP002 requires percent-encoded, non-Base64 userinfo for AEAD-2022.
+    ss = f"ss://2022-blake3-aes-256-gcm:{quote(SS_PASSWORD)}@{server_host}:10443#Fortress-Shadowsocks2022"
     wg_native = f"wg://{server_host}:51820?publickey={urllib.parse.quote(WG_SERVER_PUB)}&privkey={urllib.parse.quote(WG_CLIENT_PRIV)}&address={WG_CLIENT_IP}%2F32&dns=10.8.0.1#Fortress-WireGuard-Native"
     wg_tcp = f"wstunnel://{server_host}:{WSTUNNEL_PORT}?sni={domain_target}&prefix=&tunnel=127.0.0.1:51820#Fortress-WireGuard-TCP"
     return [vless, hy2_sal, hy2_std, tuic, ss, wg_native, wg_tcp]
 
-def get_singbox_json_config(mode="full"):
+def get_singbox_json_config(mode="full", core="1.11"):
     """
     Returns a Sing-box 1.11+ configuration with:
     - address array in tun inbound
-    - mode-specific strict routing: full mode fails closed; traffic-only permits local DNS helpers
+    - strict routing while running; not a persistent process-independent kill switch
     - Supported proxy outbounds plus a separate WSTunnel link; auto-fastest tests stealth outbounds only
     - Cryptographically verified TLS with embedded private CA (no insecure: true)
     - mode="full": remote self-hosted DNS + public IPv4 proxying; private/LAN traffic is not exempted
     - mode="traffic-only": direct local/private IPv4 exceptions + public IPv4 proxying
     - IPv6 is explicitly blocked in both modes to avoid an unconfigured fallback path
     """
+    if core not in ("1.11", "1.14"):
+        raise ValueError("Supported profile cores are 1.11 and 1.14")
+    ipaddress.IPv4Address(SERVER_IP)  # This release supports numeric IPv4 endpoints only.
     is_traffic_only = is_traffic_only_mode(mode)
-    ca_pem = None
-    for cadir in [RAM_DIR, DISK_DIR]:
-        for fname in ["ca.crt", "cert.pem"]:
-            capath = os.path.join(cadir, fname)
-            if os.path.exists(capath):
-                try:
-                    with open(capath, "r", encoding="utf-8") as caf:
-                        c_text = caf.read().strip()
-                        if "-----BEGIN CERTIFICATE-----" in c_text:
-                            ca_pem = c_text
-                            break
-                except Exception:
-                    pass
-        if ca_pem:
-            break
+    if not is_traffic_only and str(mode).lower() not in ('full', 'full-tunnel', 'full_tunnel'):
+        raise ValueError("Unsupported routing mode")
+    ca_pem = verified_private_ca()
 
     stealth_outbounds = [
         "Fortress-Reality-TCP",
@@ -787,9 +858,7 @@ def get_singbox_json_config(mode="full"):
         tun_exclude[0:0] = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
 
     cfg = {
-        "log": {
-            "level": "warn"
-        },
+        "log": {"disabled": True},
         "dns": dns_config,
         "inbounds": [
             {
@@ -803,15 +872,13 @@ def get_singbox_json_config(mode="full"):
                 "strict_route": not is_traffic_only,
                 "route_exclude_address": tun_exclude,
                 "stack": "mixed",
-                "endpoint_independent_nat": True,
-                "sniff": True
+                "mtu": 1400
             },
             {
                 "type": "mixed",
                 "tag": "mixed-in",
                 "listen": "127.0.0.1",
-                "listen_port": 2080,
-                "sniff": True
+                "listen_port": 2080
             }
         ],
         "outbounds": [
@@ -929,8 +996,7 @@ def get_singbox_json_config(mode="full"):
                 "YogaDNS.exe", "yogadns.exe", "YogaDNS",
                 "NextDNS.exe", "nextdns.exe",
                 "dnscrypt-proxy.exe", "dnscrypt-proxy",
-                "stubby.exe", "stubby",
-                "cloudflared.exe", "cloudflared"
+                "stubby.exe", "stubby"
             ],
             "outbound": "direct"
         })
@@ -952,25 +1018,13 @@ def get_singbox_json_config(mode="full"):
                 "doh.opendns.com"
             ],
             "domain_suffix": [
-                ".nextdns.io",
-                ".cloudflare-dns.com",
-                ".dns.google",
-                ".quad9.net",
-                ".adguard-dns.com",
-                ".adguard.com",
-                ".controld.com",
-                ".opendns.com",
-                ".cleanbrowsing.org",
-                ".mullvad.net",
-                ".ahadns.net",
-                ".dnswarden.com",
-                ".libredns.gr",
-                ".dnscrypt.info"
+                "dns.nextdns.io", "dns.quad9.net", "dns.adguard-dns.com"
             ],
+            "port": [443, 853],
             "outbound": "direct"
         })
     else:
-        rules.append({"action": "hijack-dns"})
+        rules.append({"protocol": "dns", "action": "hijack-dns"})
 
     if is_traffic_only:
         rules.extend([
@@ -1000,10 +1054,34 @@ def get_singbox_json_config(mode="full"):
         }
     ])
 
-    cfg["route"] = {
-        "auto_detect_interface": True,
-        "rules": rules
-    }
+    # Reject IPv6 before sniffing, and sniff before matching DNS or provider names.
+    rules.insert(1, {"action": "sniff"})
+    cfg["route"] = {"auto_detect_interface": True, "rules": rules}
+    if core == "1.14":
+        dns_server = ({"type": "local", "tag": "dns-direct"} if is_traffic_only else
+                      {"type": "tcp", "tag": "dns-remote", "server": "10.8.0.1",
+                       "server_port": DNS_PORT, "detour": "proxy"})
+        cfg["dns"]["servers"] = [dns_server]
+        cfg["inbounds"][0]["dns_mode"] = "disabled" if is_traffic_only else "hijack"
+        cfg["outbounds"] = [o for o in cfg["outbounds"] if o["type"] != "block"]
+        for rule in rules:
+            if rule.get("outbound") == "block-ipv6":
+                rule.pop("outbound")
+                rule["action"] = "reject"
+        endpoints = []
+        for outbound in list(cfg["outbounds"]):
+            if outbound["type"] != "wireguard":
+                continue
+            cfg["outbounds"].remove(outbound)
+            endpoints.append({"type": "wireguard", "tag": outbound["tag"], "system": False,
+                              "address": outbound["local_address"], "private_key": outbound["private_key"],
+                              "mtu": outbound["mtu"], "peers": [
+                                  {"address": p["server"], "port": p["server_port"],
+                                   "public_key": p["public_key"], "allowed_ips": p["allowed_ips"],
+                                   "persistent_keepalive_interval": 15} for p in outbound["peers"]]})
+        if endpoints:
+            cfg["endpoints"] = endpoints
+        cfg["route"]["default_domain_resolver"] = dns_server["tag"]
     return cfg
 
 LOGIN_HTML_TEMPLATE = """<!DOCTYPE html>
@@ -1031,15 +1109,16 @@ LOGIN_HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="card">
         <div class="shield">{{LOGO_SVG_LARGE}}</div>
         <h1>SOVEREIGN FORTRESS</h1>
-        <p style="margin-bottom: 12px;">Authentication Required</p>
+        <p style="margin-bottom: 12px;">Authentication Required — use the login form, not credentials in a URL.</p>
         {{ERR_HTML}}
         <form method="POST" action="/portal/login">
-            <input type="password" name="auth_credential" placeholder="Token (ft_sec_...) or 6-digit TOTP" required autofocus autocomplete="off">
+            <input type="password" name="auth_credential" placeholder="Subscription/admin token (ft_sec_...)" required autofocus autocomplete="off">
+            <input type="password" name="totp_code" placeholder="Separate portal second-factor code, if enrolled" autocomplete="one-time-code">
             <button type="submit" class="btn">AUTHENTICATE</button>
         </form>
         <div style="margin-top: 16px; font-size: 11px; color: #64748b; line-height: 1.5; text-align: left; background: #070b14; padding: 10px; border-radius: 8px; border: 1px solid #1e293b;">
-            <strong style="color: #94a3b8;">First-time setup:</strong> Enter your Master Secret Token (<code style="color: #38bdf8;">ft_sec_...</code>) to unlock the dashboard and scan your 2FA QR code.<br><br>
-            <strong style="color: #94a3b8;">Already paired:</strong> Enter the live 6-digit code from Google Authenticator.
+            <strong style="color: #94a3b8;">First-time setup:</strong> Enter your Master Secret Token (<code style="color: #38bdf8;">ft_sec_...</code>) to unlock the dashboard. Enroll SSH 2FA separately on the server.<br><br>
+            <strong style="color: #94a3b8;">Second factor:</strong> If the operator enabled separate portal TOTP, enter it together with the token. An OTP alone cannot export subscriptions.
         </div>
     </div>
     <div style="margin-top: 24px; font-size: 11px; color: #64748b; line-height: 1.6; text-align: center; max-width: 440px;">
@@ -1248,13 +1327,13 @@ def render_not_found_page():
     return html.encode("utf-8")
 
 def render_login_page(error_msg=None):
-    err_html = f'<div style="background:rgba(239,68,68,0.2);border:1px solid #ef4444;color:#fca5a5;padding:10px;border-radius:8px;font-size:13px;margin-bottom:16px;">{error_msg}</div>' if error_msg else ''
+    err_html = f'<div style="background:rgba(239,68,68,0.2);border:1px solid #ef4444;color:#fca5a5;padding:10px;border-radius:8px;font-size:13px;margin-bottom:16px;">{html_escape.escape(error_msg)}</div>' if error_msg else ''
     html = LOGIN_HTML_TEMPLATE.replace("{{ERR_HTML}}", err_html)
     html = html.replace("{{LOGO_SVG_LARGE}}", LOGO_SVG_LARGE)
     return html
 
-def render_dashboard_page(token, totp_secret):
-    host_for_sub = DOMAIN if (DOMAIN and not DOMAIN.startswith("<")) else SERVER_IP
+def render_dashboard_page(token, totp_secret, session=""):
+    host_for_sub = endpoint_host(DOMAIN if (DOMAIN and not DOMAIN.startswith("<")) else SERVER_IP)
     sub_full_url = f"https://{host_for_sub}:{PORT}/sub/{token}?mode=full"
     sub_traffic_url = f"https://{host_for_sub}:{PORT}/sub/{token}?mode=traffic-only"
     sub_b64_url = f"https://{host_for_sub}:{PORT}/sub/{token}/b64"
@@ -1282,11 +1361,34 @@ def render_dashboard_page(token, totp_secret):
     html = html.replace("{{SS}}", ss)
     html = html.replace("{{WG_NATIVE}}", wg_native)
     html = html.replace("{{WG_TCP}}", wg_tcp)
+    html = html.replace("{{CSRF_TOKEN}}", session_csrf_token(session))
     return html
 
 class FortressSubHandler(BaseHTTPRequestHandler):
+    server_version = "Fortress"
+    sys_version = ""
+
     def log_message(self, format, *args):
         pass
+
+    def end_headers(self):
+        # Do not expose bearer URLs through referrers, framing, or shared caches.
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        self.send_header("Cache-Control", "no-store")
+        super().end_headers()
+
+    def json_response(self, status, obj):
+        body = json.dumps(obj, separators=(",", ":")).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.wfile.write(body)
 
     def send_redirect_to_decoy(self):
         self.send_response(302)
@@ -1300,8 +1402,15 @@ class FortressSubHandler(BaseHTTPRequestHandler):
 
     def enforce_https_upgrade(self):
         is_ssl = isinstance(self.connection, ssl.SSLSocket)
-        req_host = self.headers.get("Host", "").split(":")[0].strip()
+        try:
+            req_host = urllib.parse.urlsplit("https://" + self.headers.get("Host", "")).hostname
+        except ValueError:
+            req_host = None
         target_host = DOMAIN if (DOMAIN and not DOMAIN.startswith("<")) else SERVER_IP
+        if is_ssl and (req_host not in {target_host.lower(), SERVER_IP.lower()}
+                       or len(self.headers.get_all("Host", [])) != 1):
+            self.send_error(421, "Unrecognized host")
+            return True
 
         # 1. If connection is plain HTTP, redirect to HTTPS
         # 2. If DOMAIN is configured and client accessed via raw IP or other host, redirect to domain
@@ -1410,29 +1519,13 @@ class FortressSubHandler(BaseHTTPRequestHandler):
 
         # 1. Root / Portal
         if path == "" or path == "/portal":
-            token_arg = query.get("token", [None])[0]
+            # Browser authentication must use POST; GET tokens leak into history.
+            if "token" in query:
+                self.send_error(400, "Use the login form, not a token in the URL")
+                return
             session_cookie = get_session_cookie(self.headers.get("Cookie", ""))
-
-            is_authed = False
-            if token_arg and hmac.compare_digest(token_arg, master_token):
-                is_authed = True
-            elif verify_session_cookie(session_cookie):
-                is_authed = True
-
-            if is_authed:
-                totp_sec = None
-                if token_arg:
-                    # Remove the master token from browser history, referrers, and
-                    # screenshots immediately after it has established a session.
-                    self.send_response(303)
-                    self.send_header("Location", "/portal")
-                    self.send_header("Set-Cookie", f"sf_session={create_session_cookie()}; Path=/; Secure; HttpOnly; SameSite=Strict")
-                    self.send_header("Cache-Control", "no-store")
-                    self.send_header("Content-Length", "0")
-                    self.send_header("Connection", "close")
-                    self.end_headers()
-                    return
-                html = render_dashboard_page(master_token, totp_sec)
+            if verify_session_cookie(session_cookie):
+                html = render_dashboard_page(master_token, None, session_cookie)
                 body = html.encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -1467,17 +1560,8 @@ class FortressSubHandler(BaseHTTPRequestHandler):
             sub_format = sub_parts[1] if len(sub_parts) > 1 else None
 
             is_valid = False
-            # Option A: Query param TOTP (/sub/totp?code=XXXXXX)
-            if req_token == "totp":
-                totp_code = query.get("code", [""])[0]
-                if verify_totp(totp_code):
-                    is_valid = True
-            # Option B: Direct 6-digit TOTP in path (/sub/XXXXXX)
-            elif len(req_token) == 6 and req_token.isdigit() and verify_totp(req_token):
-                is_valid = True
-            # Option C: Master Secret Token (/sub/ft_sec_...)
-            elif hmac.compare_digest(req_token, master_token):
-                is_valid = True
+            # Short OTPs are not bearer credentials and must never appear in URLs.
+            is_valid = safe_compare(req_token, master_token)
 
             if not is_valid:
                 record_failed_attempt(client_ip)
@@ -1492,9 +1576,14 @@ class FortressSubHandler(BaseHTTPRequestHandler):
             if sub_format in ["traffic-only", "split", "direct-dns", "yogadns"]:
                 mode = "traffic-only"
                 fmt = None
+            if len(sub_parts) > 2 or fmt not in (None, "b64", "links", "wg", "wireguard", "wg-tcp", "wireguard-tcp"):
+                self.json_response(400, {"success": False, "error": "Unsupported subscription format"})
+                return
 
             if fmt == "b64":
-                links_text = "\n".join(get_protocol_links()) + "\n"
+                # Only common proxy URIs; desktop-only WireGuard/wstunnel are
+                # delivered separately and cannot carry a mobile DNS/TUN policy.
+                links_text = "\n".join(get_protocol_links()[:5]) + "\n"
                 b64_content = base64.b64encode(links_text.encode("utf-8")).decode("utf-8")
                 body = b64_content.encode("utf-8")
                 self.send_response(200)
@@ -1505,7 +1594,6 @@ class FortressSubHandler(BaseHTTPRequestHandler):
                 self.send_header("Content-Length", str(len(body)))
                 self.send_header("profile-title", "Sovereign Fortress")
                 self.send_header("profile-update-interval", "1")
-                self.send_header("subscription-userinfo", "upload=0; download=0; total=10737418240000; expire=0")
                 self.send_header("Connection", "close")
                 self.end_headers()
                 if not head_only:
@@ -1561,7 +1649,12 @@ class FortressSubHandler(BaseHTTPRequestHandler):
                 return
 
             # Default: Full Sing-box 1.11+ JSON
-            config_obj = get_singbox_json_config(mode=mode)
+            core = query.get("core", ["1.14"])[0]
+            try:
+                config_obj = get_singbox_json_config(mode=mode, core=core)
+            except ValueError:
+                self.json_response(400, {"success": False, "error": "Unsupported profile core or endpoint"})
+                return
             body = json.dumps(config_obj, indent=2).encode("utf-8")
             is_traffic_mode = is_traffic_only_mode(mode)
             profile_title = "Sovereign-Fortress-(Traffic-Only)" if is_traffic_mode else "Sovereign-Fortress-(Full-Tunnel)"
@@ -1573,9 +1666,7 @@ class FortressSubHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Content-Disposition", 'inline; filename="SovereignFortress.json"')
             self.send_header("profile-title", profile_title)
-            self.send_header("Profile-Title", profile_title)
             self.send_header("profile-update-interval", "1")
-            self.send_header("subscription-userinfo", "upload=0; download=0; total=10737418240000; expire=0")
             self.send_header("Connection", "close")
             self.end_headers()
             if not head_only:
@@ -1600,6 +1691,13 @@ class FortressSubHandler(BaseHTTPRequestHandler):
             path = ""
         else:
             path = path.rstrip('/')
+        origin = self.headers.get("Origin")
+        if origin and origin != "https://" + self.headers.get("Host", ""):
+            self.json_response(403, {"success": False, "error": "Origin rejected"})
+            return
+        if self.headers.get("Transfer-Encoding") or len(self.headers.get_all("Content-Length", [])) > 1:
+            self.send_error(400, "Ambiguous request framing")
+            return
         try:
             content_len = int(self.headers.get("Content-Length", 0))
         except (ValueError, TypeError):
@@ -1621,10 +1719,8 @@ class FortressSubHandler(BaseHTTPRequestHandler):
             master_token = get_or_create_token()
             authed = False
 
-            if hmac.compare_digest(cred, master_token):
-                authed = True
-            elif len(cred) == 6 and cred.isdigit() and verify_totp(cred):
-                authed = True
+            if safe_compare(cred, master_token):
+                authed = (not PORTAL_TOTP_REQUIRED or verify_totp(params.get("totp_code", [""])[0]))
 
             if authed:
                 clear_failed_attempts(client_ip)
@@ -1666,28 +1762,26 @@ class FortressSubHandler(BaseHTTPRequestHandler):
                 self.wfile.write(b'{"success":false,"error":"Denied"}')
                 return
 
-            # Defense-in-depth Anti-CSRF verification
             csrf_hdr = self.headers.get("X-Fortress-CSRF", "")
-            if not hmac.compare_digest(csrf_hdr, "1"):
-                self.send_response(403)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
-                self.send_header("Pragma", "no-cache")
-                self.send_header("Expires", "0")
-                self.send_header("Content-Length", "40")
-                self.send_header("Connection", "close")
-                self.end_headers()
-                self.wfile.write(b'{"success":false,"error":"CSRF Rejected"}')
+            if not safe_compare(csrf_hdr, session_csrf_token(session_cookie)):
+                self.json_response(403, {"success": False, "error": "CSRF rejected"})
                 return
 
+            global SESSION_SECRET
             new_token = "ft_sec_" + secrets.token_urlsafe(24)
-            save_token(new_token)
-            proto = "https" if (os.path.exists(os.path.join(RAM_DIR, "cert.pem")) or os.path.exists(os.path.join(DISK_DIR, "cert.pem"))) else "http"
-            target_host = DOMAIN if (DOMAIN and not DOMAIN.startswith("<")) else SERVER_IP
+            try:
+                with TOKEN_LOCK:
+                    save_token(new_token)
+                    # Revoke every existing portal session after credential rotation.
+                    SESSION_SECRET = secrets.token_bytes(32)
+            except OSError:
+                self.json_response(503, {"success": False, "error": "Persistent token storage unavailable"})
+                return
+            target_host = endpoint_host(DOMAIN if (DOMAIN and not DOMAIN.startswith("<")) else SERVER_IP)
             res_obj = {
                 "success": True,
                 "token": new_token,
-                "url": f"{proto}://{target_host}:{PORT}/sub/{new_token}"
+                "url": f"https://{target_host}:{PORT}/sub/{new_token}"
             }
             res_body = json.dumps(res_obj).encode("utf-8")
             self.send_response(200)
@@ -1704,10 +1798,39 @@ class FortressSubHandler(BaseHTTPRequestHandler):
         self.send_redirect_to_decoy()
 
 class AutoDetectServer(ThreadingMixIn, HTTPServer):
+    """Bounded HTTPS workers; a stalled handshake must not block accept()."""
     daemon_threads = True
+    request_queue_size = 32
+
     def __init__(self, addr, handler, ssl_ctx):
+        self.ssl_ctx = ssl_ctx
+        self.slots = threading.BoundedSemaphore(64)
         super().__init__(addr, handler)
-        self.socket = ssl_ctx.wrap_socket(self.socket, server_side=True)
+
+    def process_request(self, request, client_address):
+        if not self.slots.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self.slots.release()
+            self.shutdown_request(request)
+
+    def process_request_thread(self, request, client_address):
+        try:
+            request.settimeout(5)
+            request = self.ssl_ctx.wrap_socket(request, server_side=True)
+            request.settimeout(10)
+            super().process_request_thread(request, client_address)
+        except (OSError, ssl.SSLError):
+            self.shutdown_request(request)
+        finally:
+            self.slots.release()
+
+    def handle_error(self, request, client_address):
+        # Tracebacks can include secret-bearing request paths. Never emit them.
+        pass
 
 def main():
     token = get_or_create_token()
@@ -1724,9 +1847,12 @@ def main():
             ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
             ssl_ctx.load_cert_chain(certfile=cert_path, keyfile=key_path)
             ssl_ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+            ssl_ctx.set_ciphers("ECDHE+AESGCM:ECDHE+CHACHA20")
+            ssl_ctx.options |= ssl.OP_NO_COMPRESSION
             print("[+] TLS certificate chain loaded successfully.")
-        except Exception as e:
-            print(f"[-] Warning: Failed to initialize TLS: {e}")
+        except Exception:
+            ssl_ctx = None
+            print("[-] TLS initialization failed; details intentionally omitted.")
 
     if ssl_ctx is None:
         raise RuntimeError("Subscription service requires a valid TLS certificate and key")

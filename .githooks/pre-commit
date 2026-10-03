@@ -1,0 +1,14 @@
+#!/bin/sh
+# Reject privacy findings before creating a commit; never print matching values.
+set -eu
+export PYTHONDONTWRITEBYTECODE=1
+if [ "${OS:-}" = Windows_NT ] && command -v py >/dev/null 2>&1; then
+    exec py -3 check_repo_privacy.py
+elif command -v python3 >/dev/null 2>&1; then
+    exec python3 check_repo_privacy.py
+elif command -v python >/dev/null 2>&1; then
+    exec python check_repo_privacy.py
+else
+    echo 'Python is unavailable; refusing an unchecked commit.' >&2
+    exit 1
+fi

@@ -63,23 +63,26 @@ class ProfileRegressionTests(unittest.TestCase):
         for name in ("fortress-full-tunnel.example.json", "fortress-traffic-only.example.json"):
             with self.subTest(name=name):
                 profile = json.loads((ROOT / name).read_text(encoding="utf-8"))
-                self.assertTrue(any(o.get("tag") == "block-ipv6" for o in profile["outbounds"]))
-                self.assertTrue(any(r.get("outbound") == "block-ipv6" for r in profile["route"]["rules"]))
+                self.assertTrue(any(r.get("ip_cidr") == ["::/0"] and r.get("action") == "reject"
+                                    for r in profile["route"]["rules"]))
 
     def test_example_wireguard_outbounds_use_current_peer_schema(self):
         for name in ("fortress-full-tunnel.example.json", "fortress-traffic-only.example.json"):
             with self.subTest(name=name):
                 profile = json.loads((ROOT / name).read_text(encoding="utf-8"))
-                wireguard = [o for o in profile["outbounds"] if o.get("type") == "wireguard"]
+                wireguard = [o for o in profile["endpoints"] if o.get("type") == "wireguard"]
                 self.assertTrue(wireguard)
                 for outbound in wireguard:
                     self.assertIn("peers", outbound)
                     self.assertNotIn("peer_public_key", outbound)
                     self.assertNotIn("server_port", outbound)
+                    self.assertIn("address", outbound["peers"][0])
+                    self.assertIn("port", outbound["peers"][0])
 
     def test_full_example_never_sends_plaintext_dns_to_public_endpoint(self):
         profile = json.loads((ROOT / "fortress-full-tunnel.example.json").read_text(encoding="utf-8"))
-        self.assertEqual(profile["dns"]["servers"][0]["address"], "tcp://10.8.0.1:5335")
+        self.assertEqual(profile["dns"]["servers"][0]["server"], "10.8.0.1")
+        self.assertEqual(profile["dns"]["servers"][0]["server_port"], 5335)
         self.assertEqual(profile["dns"]["servers"][0]["detour"], "proxy")
 
     def test_dashboard_never_contains_ssh_enrollment_secret(self):

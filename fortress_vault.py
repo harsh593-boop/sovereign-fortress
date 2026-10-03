@@ -1,6 +1,7 @@
 """
 Sovereign Fortress — Windows DPAPI Client Key & Config Vault (2026)
 Cryptographically protects keys and configs at rest using Windows DPAPI.
+Deletion/overwrite cannot guarantee erasure on SSDs, snapshots, or backups.
 """
 
 import os
@@ -10,9 +11,14 @@ import ctypes
 from ctypes import wintypes
 import secrets
 import hashlib
+import tempfile
+
 
 class DATA_BLOB(ctypes.Structure):
-    _fields_ = [('cbData', wintypes.DWORD), ('pbData', ctypes.POINTER(ctypes.c_byte))]
+    # DWORD is always 32-bit, including on 64-bit Windows.
+    _fields_ = [('cbData', ctypes.c_uint32),
+                ('pbData', ctypes.POINTER(ctypes.c_ubyte))]
+
 
 def get_vault_entropy(custom_pass: str = None) -> bytes:
     if custom_pass:
@@ -22,173 +28,221 @@ def get_vault_entropy(custom_pass: str = None) -> bytes:
     seed = f"{user}:{comp}:SovereignFortressVault2026"
     return hashlib.sha256(seed.encode("utf-8")).digest()
 
-def dpapi_protect(data: bytes, entropy: bytes = None, description: str = "SovereignFortressKey") -> bytes:
+
+def _dpapi_functions():
+    if os.name != "nt":
+        raise OSError("Windows DPAPI is available only on Windows")
+    crypt32 = ctypes.WinDLL("crypt32", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    blob_ptr = ctypes.POINTER(DATA_BLOB)
+    protect = crypt32.CryptProtectData
+    protect.argtypes = [blob_ptr, wintypes.LPCWSTR, blob_ptr, ctypes.c_void_p,
+                        ctypes.c_void_p, wintypes.DWORD, blob_ptr]
+    protect.restype = wintypes.BOOL
+    unprotect = crypt32.CryptUnprotectData
+    unprotect.argtypes = [blob_ptr, ctypes.POINTER(wintypes.LPWSTR), blob_ptr,
+                          ctypes.c_void_p, ctypes.c_void_p, wintypes.DWORD, blob_ptr]
+    unprotect.restype = wintypes.BOOL
+    # Without these declarations LocalFree truncates pointers on Win64.
+    free = kernel32.LocalFree
+    free.argtypes = [ctypes.c_void_p]
+    free.restype = ctypes.c_void_p
+    return protect, unprotect, free
+
+
+def _make_blob(data):
+    buffer = ctypes.create_string_buffer(data, max(1, len(data)))
+    return DATA_BLOB(len(data), ctypes.cast(buffer, ctypes.POINTER(ctypes.c_ubyte))), buffer
+
+
+def _dpapi_transform(data, entropy, description=None, decrypt=False,
+                     allow_legacy=False):
+    protect, unprotect, free = _dpapi_functions()
+    # Retain the input buffers for the entire native call.
+    in_blob, in_buffer = _make_blob(data)
+    ent_blob, ent_buffer = _make_blob(entropy)
+    attempts = [ctypes.byref(ent_blob)]
+    if decrypt and allow_legacy:
+        attempts.append(None)
+    for entropy_ptr in attempts:
+        out_blob = DATA_BLOB()
+        try:
+            func = unprotect if decrypt else protect
+            ok = func(ctypes.byref(in_blob), None if decrypt else description,
+                      entropy_ptr, None, None, 0x1, ctypes.byref(out_blob))
+            # CRYPTPROTECT_UI_FORBIDDEN, current-user scope (not machine scope).
+            if ok:
+                if not out_blob.pbData and out_blob.cbData:
+                    raise OSError("DPAPI returned an invalid output buffer")
+                return ctypes.string_at(out_blob.pbData, out_blob.cbData)
+            error = ctypes.get_last_error()
+        finally:
+            if out_blob.pbData:
+                free(ctypes.cast(out_blob.pbData, ctypes.c_void_p))
+    raise ctypes.WinError(error)
+
+
+def dpapi_protect(data: bytes, entropy: bytes = None,
+                  description: str = "SovereignFortressKey") -> bytes:
     if entropy is None:
         entropy = get_vault_entropy()
-    in_blob = DATA_BLOB(len(data), ctypes.cast(ctypes.create_string_buffer(data, len(data)), ctypes.POINTER(ctypes.c_byte)))
-    out_blob = DATA_BLOB()
-    ent_blob = DATA_BLOB(len(entropy), ctypes.cast(ctypes.create_string_buffer(entropy, len(entropy)), ctypes.POINTER(ctypes.c_byte)))
-    # CryptProtectData with current user scope and secondary entropy
-    if not ctypes.windll.crypt32.CryptProtectData(ctypes.byref(in_blob), description, ctypes.byref(ent_blob), None, None, 0, ctypes.byref(out_blob)):
-        raise ctypes.WinError()
-    buf = (ctypes.c_byte * out_blob.cbData)()
-    ctypes.memmove(buf, out_blob.pbData, out_blob.cbData)
-    ctypes.windll.kernel32.LocalFree(out_blob.pbData)
-    return bytes(buf)
+    return _dpapi_transform(data, entropy, description=description)
+
 
 def dpapi_unprotect(data: bytes, entropy: bytes = None) -> bytes:
+    # Legacy no-entropy fallback applies only to the default vault format.
+    allow_legacy = entropy is None
     if entropy is None:
         entropy = get_vault_entropy()
-    in_blob = DATA_BLOB(len(data), ctypes.cast(ctypes.create_string_buffer(data, len(data)), ctypes.POINTER(ctypes.c_byte)))
-    out_blob = DATA_BLOB()
-    ent_blob = DATA_BLOB(len(entropy), ctypes.cast(ctypes.create_string_buffer(entropy, len(entropy)), ctypes.POINTER(ctypes.c_byte)))
-    # 1. Try with secondary entropy
-    if ctypes.windll.crypt32.CryptUnprotectData(ctypes.byref(in_blob), None, ctypes.byref(ent_blob), None, None, 0, ctypes.byref(out_blob)):
-        buf = (ctypes.c_byte * out_blob.cbData)()
-        ctypes.memmove(buf, out_blob.pbData, out_blob.cbData)
-        ctypes.windll.kernel32.LocalFree(out_blob.pbData)
-        return bytes(buf)
-    # 2. Backwards-compatible fallback with null entropy
-    if ctypes.windll.crypt32.CryptUnprotectData(ctypes.byref(in_blob), None, None, None, None, 0, ctypes.byref(out_blob)):
-        buf = (ctypes.c_byte * out_blob.cbData)()
-        ctypes.memmove(buf, out_blob.pbData, out_blob.cbData)
-        ctypes.windll.kernel32.LocalFree(out_blob.pbData)
-        return bytes(buf)
-    raise ctypes.WinError()
+    return _dpapi_transform(data, entropy, decrypt=True, allow_legacy=allow_legacy)
+
 
 def get_target_files():
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    candidates = [
-        os.path.join(base_dir, "fortress-wireguard.conf"),
-        os.path.join(base_dir, "fortress-wireguard-tcp.conf"),
-        os.path.join(base_dir, "client_profiles.txt"),
-        os.path.join(base_dir, "fortress_config.json"),
-        os.path.join(base_dir, "fortress-full-tunnel.json"),
-        os.path.join(base_dir, "fortress-traffic-only.json")
-    ]
-    # Dynamically find ssh keys in Downloads
-    user_home = os.path.expanduser("~")
-    downloads_dir = os.path.join(user_home, "Downloads")
-    if os.path.exists(downloads_dir):
-        for key_file in glob.glob(os.path.join(downloads_dir, "ssh-key-*.key*")):
-            if not key_file.endswith(".enc"):
-                candidates.append(key_file)
-            elif key_file.endswith(".enc"):
-                base_name = key_file[:-4]
-                if base_name not in candidates:
-                    candidates.append(base_name)
+    from client_paths import client_directory, client_config_path
+    base_dir = str(client_directory())
+    candidates = [str(client_config_path())] + [os.path.join(base_dir, name) for name in (
+        "fortress-wireguard.conf", "fortress-wireguard-tcp.conf", "client_profiles.txt",
+        "fortress-full-tunnel.json", "fortress-traffic-only.json")]
+    # Never enumerate unrelated SSH keys in Downloads or shred them implicitly.
+    explicit_key = os.environ.get('FORTRESS_VAULT_SSH_KEY')
+    if explicit_key:
+        candidates.append(os.path.abspath(os.path.expanduser(explicit_key)))
     return list(dict.fromkeys(candidates))
 
-def secure_shred(file_path: str):
-    if not os.path.exists(file_path):
-        return
+
+def _publish_new(path, data):
+    """Flush a complete sibling file, then publish atomically without replacement."""
+    fd, temp_path = tempfile.mkstemp(prefix=".fortress-vault-", suffix=".tmp",
+                                     dir=os.path.dirname(os.path.abspath(path)))
     try:
-        size = os.path.getsize(file_path)
-        if size > 0:
-            with open(file_path, "wb") as f:
-                # Pass 1: Cryptographic random bytes
-                f.write(secrets.token_bytes(size))
-                f.flush()
-                os.fsync(f.fileno())
-            with open(file_path, "wb") as f:
-                # Pass 2: Inverted 0xFF bytes
-                f.write(b"\xff" * size)
-                f.flush()
-                os.fsync(f.fileno())
-            with open(file_path, "wb") as f:
-                # Pass 3: Zero bytes
-                f.write(b"\x00" * size)
-                f.flush()
-                os.fsync(f.fileno())
-        os.remove(file_path)
-        print(f" [X] Multi-pass overwritten and removed: {os.path.basename(file_path)}")
-    except Exception as e:
-        print(f" [-] Error shredding {file_path}: {e}")
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        with open(temp_path, "rb") as stream:
+            if stream.read() != data:
+                raise OSError("Vault output verification failed")
+        # Same-volume hard link is atomic and fails if a destination appeared.
+        # Unsupported filesystems fail safely; never fall back to an overwrite.
+        os.link(temp_path, path)
+    finally:
+        os.unlink(temp_path)
+
+
+def secure_shred(file_path: str):
+    """Best-effort logical overwrite/delete, NOT guaranteed physical erasure."""
+    if not os.path.lexists(file_path):
+        return
+    if os.path.islink(file_path) or not os.path.isfile(file_path):
+        raise OSError("Refusing to overwrite a link or non-regular file")
+    with open(file_path, "r+b") as stream:
+        size = os.fstat(stream.fileno()).st_size
+        for pattern in (None, b"\xff", b"\x00"):
+            stream.seek(0)
+            remaining = size
+            while remaining:
+                amount = min(remaining, 1024 * 1024)
+                chunk = secrets.token_bytes(amount) if pattern is None else pattern * amount
+                stream.write(chunk)
+                remaining -= amount
+            stream.flush()
+            os.fsync(stream.fileno())
+    os.remove(file_path)
+    print(f" [X] Best-effort overwrite and removal: {os.path.basename(file_path)}")
+
+
+def _convert_vault(lock):
+    operation = "lock" if lock else "unlock"
+    count = failures = 0
+    for path in get_target_files():
+        enc_path = path + ".enc"
+        source, destination = (path, enc_path) if lock else (enc_path, path)
+        try:
+            if not os.path.lexists(source):
+                continue
+            if os.path.islink(source) or not os.path.isfile(source):
+                raise OSError("Refusing a link or non-regular source")
+            if os.path.lexists(destination):
+                raise FileExistsError("Both plaintext and encrypted files exist; resolve manually")
+            with open(source, "rb") as stream:
+                source_stat = os.fstat(stream.fileno())
+                data = stream.read()
+            converted = dpapi_protect(data) if lock else dpapi_unprotect(data)
+            if lock and (not converted or dpapi_unprotect(converted) != data):
+                raise OSError("DPAPI round-trip verification failed")
+            _publish_new(destination, converted)
+            # Never overwrite the authoritative source as part of conversion.
+            # Detect concurrent edits/replacements before deleting that source.
+            if os.path.islink(source):
+                raise OSError("Vault source was replaced with a link")
+            with open(source, "rb") as stream:
+                current_stat = os.fstat(stream.fileno())
+                fields = ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns")
+                if (any(getattr(source_stat, field) != getattr(current_stat, field)
+                        for field in fields) or stream.read() != data):
+                    raise OSError("Vault source changed during conversion")
+            # If deletion fails, keep both complete copies and report failure.
+            os.remove(source)
+            count += 1
+            print(f" [+] {operation.capitalize()} completed: {os.path.basename(path)}")
+        except Exception as exc:
+            failures += 1
+            print(f" [-] {operation.capitalize()} failed for {os.path.basename(path)} "
+                  f"({type(exc).__name__}); recoverable copies retained where possible.")
+    status = "FAILED" if failures else "OK"
+    print(f"[{status}] Vault {operation}: {count} converted, {failures} failed.")
+    if lock:
+        print("Plaintext deletion does not erase SSD blocks, backups, or in-memory credentials.")
+    return failures == 0
+
 
 def lock_vault():
-    print("=" * 60)
-    print("   LOCKING SOVEREIGN FORTRESS VAULT (WINDOWS DPAPI)   ")
-    print("=" * 60)
-    print("[*] Encrypting sensitive configuration files and private keys at rest...")
-    count = 0
-    for path in get_target_files():
-        enc_path = path + ".enc"
-        if os.path.exists(path):
-            with open(path, "rb") as f:
-                raw = f.read()
-            enc = dpapi_protect(raw)
-            with open(enc_path, "wb") as f:
-                f.write(enc)
-            secure_shred(path)
-            print(f" [+] Encrypted and wiped: {os.path.basename(path)} -> {os.path.basename(enc_path)}")
-            count += 1
-        elif os.path.exists(enc_path):
-            print(f" [=] Already locked: {os.path.basename(enc_path)}")
-    print(f"\n[OK] Vault Locked! {count} file(s) encrypted with Windows user-bound DPAPI (CryptProtectData).")
+    return _convert_vault(lock=True)
+
 
 def unlock_vault():
-    print("=" * 60)
-    print("   UNLOCKING SOVEREIGN FORTRESS VAULT (WINDOWS DPAPI)   ")
-    print("=" * 60)
-    print("[*] Decrypting sensitive configuration files for active session...")
-    count = 0
-    for path in get_target_files():
-        enc_path = path + ".enc"
-        if os.path.exists(enc_path):
-            with open(enc_path, "rb") as f:
-                enc = f.read()
-            try:
-                dec = dpapi_unprotect(enc)
-                with open(path, "wb") as f:
-                    f.write(dec)
-                os.remove(enc_path)
-                print(f" [+] Decrypted and restored: {os.path.basename(path)}")
-                count += 1
-            except Exception as e:
-                print(f" [-] Failed to decrypt {os.path.basename(enc_path)}: {e}")
-        elif os.path.exists(path):
-            print(f" [=] Already unlocked: {os.path.basename(path)}")
-    print(f"\n[OK] Vault Unlocked! {count} file(s) restored into active workspace for VPN client operation.\nTip: Lock vault when VPN session is complete to prevent plaintext storage.")
+    return _convert_vault(lock=False)
+
 
 def panic_shred_local():
-    print("=" * 60)
-    print("   SOVEREIGN FORTRESS: LOCAL CLIENT EMERGENCY PANIC   ")
-    print("=" * 60)
-    print("[!] WARNING: This will permanently overwrite and delete all VPN configurations,")
-    print("    private keys, QR codes, and SSH credentials from this computer.")
-    confirm = input("Type 'VAPORIZE' to proceed: ").strip()
-    if confirm != "VAPORIZE":
+    print("[!] Best-effort overwrite/delete of local configurations and keys.")
+    print("[!] Cannot erase SSD remnants, snapshots, backups, or in-memory credentials.")
+    if input("Type 'VAPORIZE' to proceed: ").strip() != "VAPORIZE":
         print("[-] Panic aborted. No files were touched.")
-        return
-
+        return False
     all_files = []
-    base_dir = os.path.dirname(os.path.abspath(__file__))
     for base in get_target_files():
-        all_files.append(base)
-        all_files.append(base + ".enc")
-    
-    qr_dir = os.path.join(base_dir, "qr_codes")
-    if os.path.exists(qr_dir):
-        for fname in os.listdir(qr_dir):
-            all_files.append(os.path.join(qr_dir, fname))
+        all_files.extend((base, base + ".enc"))
+    qr_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "qr_codes")
+    if os.path.isdir(qr_dir):
+        all_files.extend(os.path.join(qr_dir, name) for name in os.listdir(qr_dir))
+    failures = 0
+    for path in dict.fromkeys(all_files):
+        try:
+            secure_shred(path)
+        except Exception as exc:
+            failures += 1
+            print(f" [-] Removal failed for {os.path.basename(path)} ({type(exc).__name__})")
+    print("[FAILED] Some files could not be removed." if failures else
+          "[OK] Best-effort removal completed; physical erasure is not guaranteed.")
+    return failures == 0
 
-    print("\n[*] Commencing Multi-Pass Overwrite & Cryptographic Key Erasure...")
-    for f in all_files:
-        secure_shred(f)
-    print("\n[OK] CREDENTIAL ERASURE COMPLETE. All local configurations and keys overwritten and removed.")
+
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    actions = {"lock": lock_vault, "unlock": unlock_vault, "shred": panic_shred_local}
+    if len(argv) != 1 or argv[0].lower() not in actions:
+        print("Usage: python fortress_vault.py [lock|unlock|shred]")
+        return 1
+    if os.name != "nt":
+        print("[-] This vault requires Windows; no files were changed.")
+        return 1
+    try:
+        return 0 if actions[argv[0].lower()]() else 1
+    except Exception as exc:
+        print(f"[-] Vault operation failed ({type(exc).__name__}).")
+        return 1
+
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python fortress_vault.py [lock|unlock|shred]")
-        sys.exit(1)
-    
-    cmd = sys.argv[1].lower()
-    if cmd == "lock":
-        lock_vault()
-    elif cmd == "unlock":
-        unlock_vault()
-    elif cmd == "shred":
-        panic_shred_local()
-    else:
-        print(f"[-] Unknown command: {cmd}")
-        sys.exit(1)
+    sys.exit(main())

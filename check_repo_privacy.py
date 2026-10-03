@@ -29,6 +29,9 @@ GENERIC_FORBIDDEN_PATTERNS: tuple[tuple[str, str], ...] = (
     (r"\bft_sec_[0-9a-fA-F]{32}\b", "Subscription token format"),
     (r"\bft_sec_[A-Za-z0-9_-]{32}\b", "Subscription token format"),
     (r"\b[A-Z2-7]{32}\b", "TOTP secret format"),
+    (r"-----BEGIN (?:[A-Z0-9]+ )?PRIVATE KEY-----", "Private key PEM marker"),
+    (r"\b(?:ghp_|gho_|ghu_|ghs_|ghr_)[A-Za-z0-9]{36,255}\b", "GitHub token format"),
+    (r"\bgithub_pat_[A-Za-z0-9_]{20,255}\b", "GitHub fine-grained token format"),
 )
 
 SENSITIVE_CONFIG_KEYS = frozenset(
@@ -151,12 +154,12 @@ def _relative_path(root: Path, path: Path) -> str:
 
 
 def _iter_worktree_files(root: Path) -> Iterator[Path]:
-    """Yield regular files, including ignored/untracked files, but not .git."""
+    """Yield regular files, including ignored/untracked files, but not .git or bytecode."""
 
     for path in root.rglob("*"):
         try:
             relative = path.relative_to(root)
-            if ".git" in relative.parts or path.is_symlink():
+            if ".git" in relative.parts or "__pycache__" in relative.parts or path.suffix == ".pyc" or path.is_symlink():
                 continue
             if path.is_file():
                 yield path
@@ -242,6 +245,10 @@ def _path_is_forbidden(path: str) -> bool:
     return any(re.search(pattern, path, re.IGNORECASE) for pattern in FORBIDDEN_FILE_PATTERNS)
 
 
+class ScanFailure(RuntimeError):
+    """Safe diagnostic for a scan that could not complete."""
+
+
 def _git_output(root: Path, args: Sequence[str]) -> list[str]:
     try:
         result = subprocess.run(
@@ -252,8 +259,8 @@ def _git_output(root: Path, args: Sequence[str]) -> list[str]:
             text=True,
             errors="replace",
         )
-    except (OSError, subprocess.SubprocessError):
-        return []
+    except (OSError, subprocess.SubprocessError) as error:
+        raise ScanFailure("Git metadata could not be scanned") from error
     return result.stdout.splitlines()
 
 
@@ -274,8 +281,8 @@ def _history_object_ids(root: Path) -> list[str]:
             text=True,
             errors="replace",
         )
-    except (OSError, subprocess.SubprocessError):
-        return []
+    except (OSError, subprocess.SubprocessError) as error:
+        raise ScanFailure("Git objects could not be enumerated") from error
     object_ids: list[str] = []
     for line in result.stdout.splitlines():
         fields = line.split()
@@ -301,29 +308,30 @@ def _iter_git_blobs(root: Path) -> Iterator[tuple[str, bytes]]:
         )
         assert process.stdin is not None and process.stdout is not None
         for object_id in object_ids:
+            # Interleave requests and responses. Sending every ID first can
+            # deadlock once both pipe buffers fill in a larger repository.
             process.stdin.write((object_id + "\n").encode("ascii"))
-        process.stdin.close()
-
-        for object_id in object_ids:
+            process.stdin.flush()
             header = process.stdout.readline()
             if not header:
-                break
+                raise ScanFailure("Git blob stream ended early")
             fields = header.split()
             if len(fields) < 3 or fields[1] != b"blob":
-                continue
-            try:
-                size = int(fields[2])
-            except ValueError:
-                continue
+                raise ScanFailure("Git blob protocol could not be verified")
+            size = int(fields[2])
             content = process.stdout.read(size)
             process.stdout.read(1)  # batch protocol's trailing newline
-            if len(content) == size:
-                yield object_id, content
+            if len(content) != size:
+                raise ScanFailure("Git blob content was truncated")
+            yield object_id, content
+        process.stdin.close()
         process.wait(timeout=30)
-    except (OSError, ValueError, subprocess.SubprocessError):
+        if process.returncode:
+            raise ScanFailure("Git blob reader failed")
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
         if process is not None and process.poll() is None:
             process.kill()
-        return
+        raise ScanFailure("Git blob scan could not complete") from error
     finally:
         if process is not None:
             if process.stdout is not None:
@@ -344,6 +352,8 @@ def scan_repository(
     """Scan the complete worktree and local Git blobs, returning safe findings."""
 
     root = Path(repository or Path(__file__).resolve().parent).resolve()
+    if not root.is_dir():
+        return [Violation("[repository]", 0, "Repository directory unavailable", "scan")]
     patterns = _patterns(root, environ)
     violations: list[Violation] = []
     seen: set[tuple[str, int, str, str]] = set()
@@ -355,7 +365,12 @@ def scan_repository(
                 seen.add(key)
                 violations.append(item)
 
-    tracked = _tracked_paths(root)
+    try:
+        tracked = _tracked_paths(root)
+    except ScanFailure:
+        tracked = []
+        if include_history or (root / '.git').exists():
+            add_all([Violation("[Git metadata]", 0, "Git metadata unavailable; scan incomplete", "scan")])
     for path in tracked:
         if _path_is_forbidden(path):
             add_all([Violation(path, 0, "Sensitive file tracked by Git", "path")])
@@ -374,11 +389,13 @@ def scan_repository(
         add_all(_scan_text(text, relative, "worktree", patterns))
 
     if include_history:
-        for object_id, content in _iter_git_blobs(root):
-            text = content.decode("utf-8", errors="replace")
-            # Object IDs are safe metadata and provide a useful location while
-            # keeping historical path names and matched content out of output.
-            add_all(_scan_text(text, f"git blob {object_id[:12]}", "git blob", patterns))
+        try:
+            for object_id, content in _iter_git_blobs(root):
+                text = content.decode("utf-8", errors="replace")
+                # Only object metadata is printed, never matching content.
+                add_all(_scan_text(text, f"git blob {object_id[:12]}", "git blob", patterns))
+        except ScanFailure:
+            add_all([Violation("[Git history]", 0, "Git history unavailable; scan incomplete", "scan")])
 
     return violations
 
@@ -408,6 +425,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--no-history", action="store_true", help="skip Git object scanning")
     args = parser.parse_args(argv)
     violations = scan_repository(args.root, include_history=not args.no_history)
+    if args.no_history:
+        print("[i] Git history intentionally skipped; this is a worktree-only scan.")
     _print_report(violations)
     return 1 if violations else 0
 

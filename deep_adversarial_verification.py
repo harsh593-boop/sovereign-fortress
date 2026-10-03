@@ -13,6 +13,10 @@ import http.cookiejar
 import http.client
 import subprocess
 
+if "--legacy-live" not in sys.argv:
+    print("Archival verifier disabled by default; use server_smoke_checks.py and tests/test_subscription_https.py.")
+    sys.exit(2)
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "fortress_config.json")
 CONFIG = {}

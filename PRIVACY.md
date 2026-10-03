@@ -57,7 +57,18 @@ Split-tunnel rules intentionally send selected internal traffic to
 the local network. Users must confirm that routing and DNS choices comply with
 their network owner's policies.
 
-## 4. Operator checklist
+## 4. Private Windows settings
+
+The GUI and vault use `%LOCALAPPDATA%\\SovereignFortress` by default, outside
+the public source checkout. DPAPI protection is current-user scoped; processes
+running as that user can decrypt it. Hiddify caches/databases, clipboard, memory,
+swap, backups, and cloud disks need separate review. The vault never enumerates
+all SSH keys in Downloads; additional keys require explicit selection.
+
+Portal second-factor enrollment must be separate from SSH PAM enrollment.
+The client bundle does not export the SSH seed. Standalone OTP URLs are retired.
+
+## 5. Operator checklist
 
 Before making a deployment available to anyone else, document and review:
 
@@ -72,7 +83,7 @@ subscription URLs, QR exports, or generated certificates. Replace all example
 placeholders before a private deployment, and rotate any value that may have
 been exposed.
 
-## 5. Responsible use
+## 6. Responsible use
 
 Use the software only on systems and networks you own or are authorized to
 operate. See [LEGAL.md](LEGAL.md) and [TERMS.md](TERMS.md) for the project's
