@@ -731,8 +731,7 @@ cat <<EOF > "$DISK_DIR/wg0.conf"
 Address = 10.8.0.1/24
 ListenPort = 51820
 PrivateKey = ${WG_SERVER_PRIV}
-PostUp = iptables -t nat -I PREROUTING 1 -i wg0 -p udp --dport 53 -j REDIRECT --to-ports 5335; iptables -t nat -I PREROUTING 2 -i wg0 -p tcp --dport 53 -j REDIRECT --to-ports 5335
-PostDown = iptables -t nat -D PREROUTING -i wg0 -p udp --dport 53 -j REDIRECT --to-ports 5335 || true; iptables -t nat -D PREROUTING -i wg0 -p tcp --dport 53 -j REDIRECT --to-ports 5335 || true
+# Plain DNS redirection intentionally omitted; clients use private DoT/DoH/DoQ.
 
 [Peer]
 PublicKey = ${WG_CLIENT_PUB}
@@ -965,7 +964,7 @@ cat <<EOF > "$RAM_DIR/fortress-wireguard.conf"
 [Interface]
 PrivateKey = ${WG_CLIENT_PRIV}
 Address = 10.8.0.2/24
-DNS = 10.8.0.1
+# Configure device Private DNS/DoT separately; plain DNS is disabled on the server.
 MTU = 1360
 
 [Peer]
@@ -980,7 +979,7 @@ cat <<EOF > "$RAM_DIR/fortress-wireguard-tcp.conf"
 [Interface]
 PrivateKey = ${WG_CLIENT_PRIV}
 Address = 10.8.0.2/24
-DNS = 10.8.0.1
+# Configure device Private DNS/DoT separately; plain DNS is disabled on the server.
 MTU = 1360
 
 [Peer]

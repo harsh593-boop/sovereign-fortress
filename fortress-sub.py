@@ -1621,7 +1621,7 @@ class FortressSubHandler(BaseHTTPRequestHandler):
                 return
 
             if fmt in ["wg", "wireguard"]:
-                wg_conf = f"[Interface]\nPrivateKey = {WG_CLIENT_PRIV}\nAddress = {WG_CLIENT_IP}/24\nDNS = 10.8.0.1\nMTU = 1360\n\n[Peer]\nPublicKey = {WG_SERVER_PUB}\nEndpoint = {SERVER_IP}:51820\nAllowedIPs = 0.0.0.0/0\nPersistentKeepalive = 15\n"
+                wg_conf = f"[Interface]\nPrivateKey = {WG_CLIENT_PRIV}\nAddress = {WG_CLIENT_IP}/24\n# Configure device Private DNS/DoT separately; plain DNS is disabled on the server.\nMTU = 1360\n\n[Peer]\nPublicKey = {WG_SERVER_PUB}\nEndpoint = {SERVER_IP}:51820\nAllowedIPs = 0.0.0.0/0\nPersistentKeepalive = 15\n"
                 body = wg_conf.encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "text/plain; charset=utf-8")
@@ -1637,7 +1637,7 @@ class FortressSubHandler(BaseHTTPRequestHandler):
                 return
 
             if fmt in ["wg-tcp", "wireguard-tcp"]:
-                wg_tcp_conf = f"[Interface]\nPrivateKey = {WG_CLIENT_PRIV}\nAddress = {WG_CLIENT_IP}/24\nDNS = 10.8.0.1\nMTU = 1360\n\n[Peer]\nPublicKey = {WG_SERVER_PUB}\nEndpoint = 127.0.0.1:51820\nAllowedIPs = 0.0.0.0/0\nPersistentKeepalive = 15\n"
+                wg_tcp_conf = f"[Interface]\nPrivateKey = {WG_CLIENT_PRIV}\nAddress = {WG_CLIENT_IP}/24\n# Configure device Private DNS/DoT separately; plain DNS is disabled on the server.\nMTU = 1360\n\n[Peer]\nPublicKey = {WG_SERVER_PUB}\nEndpoint = 127.0.0.1:51820\nAllowedIPs = 0.0.0.0/0\nPersistentKeepalive = 15\n"
                 body = wg_tcp_conf.encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "text/plain; charset=utf-8")
