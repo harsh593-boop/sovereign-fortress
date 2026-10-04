@@ -15,8 +15,6 @@ import shutil
 import subprocess
 import tempfile
 import time
-import yaml
-
 AGH_PATH=Path('/opt/AdGuardHome/AdGuardHome.yaml')
 AGH_RUNTIME=Path('/run/fortress/adguard/AdGuardHome.yaml')
 CORE_PATH=Path('/run/fortress/config.json')
@@ -80,6 +78,7 @@ def main():
  # active leaf SAN directly instead.
  san=subprocess.check_output(['openssl','x509','-in',str(CERT),'-noout','-ext','subjectAltName'],text=True)
  if 'DNS:'+DOMAIN not in san:raise SystemExit('active certificate does not cover configured DuckDNS name')
+ import yaml
  agh=transform_agh(yaml.safe_load(AGH_PATH.read_text()))
  core=transform_core(json.loads(CORE_PATH.read_text()))
  fd,staged=tempfile.mkstemp(dir='/run/fortress',prefix='.encrypted-core-')
