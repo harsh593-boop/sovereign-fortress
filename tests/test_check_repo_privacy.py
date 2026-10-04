@@ -116,7 +116,7 @@ class PrivacyScannerTests(unittest.TestCase):
         git(repository, 'commit', '-m', 'many synthetic blobs')
         result = subprocess.run([sys.executable, str(REPOSITORY / 'check_repo_privacy.py'),
                                  '--root', str(repository)], capture_output=True, timeout=30)
-        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.returncode, 0, result.stdout.decode(errors='replace') + result.stderr.decode(errors='replace'))
 
     def test_missing_root_is_not_reported_as_a_clean_scan(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
