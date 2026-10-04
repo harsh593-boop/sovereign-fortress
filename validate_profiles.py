@@ -105,7 +105,7 @@ def main():
                 # Validate the first-install server heredoc too; do not execute
                 # the installer or load any deployment values.
                 source = (ROOT / 'deploy_server.sh').read_text()
-                dns_match = re.search(r"SERVER_DNS_JSON='(.*?)'", source, re.S)
+                dns_match = re.search(r"SERVER_DNS_JSON=\$\(cat <<EOF\n(.*?)\nEOF\n\)", source, re.S)
                 server_match = re.search(r'cat <<EOF > "\$RAM_DIR/config.json"\n(.*?)\nEOF', source, re.S)
                 if not dns_match or not server_match:
                     raise RuntimeError('Expected reviewed server template not found')
