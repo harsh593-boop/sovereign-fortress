@@ -26,6 +26,9 @@ Can be evaluated on an OCI VM. Pricing, eligibility, bandwidth limits, and servi
 ## Current verification and supported profiles
 
 See [SECURITY_REVIEW.md](SECURITY_REVIEW.md) for evidence and open release gates.
+Current application-core migration/recovery and provider-authority steps are in
+[HOST_MAINTENANCE.md](HOST_MAINTENANCE.md); read-only Windows readiness and required
+administrator/packet-testing gates are in [WINDOWS_NETWORK_READINESS.md](WINDOWS_NETWORK_READINESS.md).
 The subscription defaults to **Sing-box 1.14** syntax. Request `&core=1.11`
 explicitly for the validated legacy 1.11.4 profile. The public JSON examples
 are **1.14** templates; do not load them unchanged into a 1.11 or 1.13 core.
@@ -201,7 +204,7 @@ sudo env FORTRESS_SERVER_IP='<YOUR_SERVER_IP>' \
 The automated installer will:
 1. Create dedicated unprivileged system user `fortress` with minimal network binding capability (`CAP_NET_BIND_SERVICE`) and strict systemd sandboxing.
 2. Optionally mount a 256 MB volatile RAM disk (`tmpfs`) at `/run/fortress` for selected runtime state; verify host logging separately.
-3. Install Sing-box 1.11.4 Core and WSTunnel with SHA-256 cryptographic verification.
+3. Install pinned Sing-box 1.14.2 Core and WSTunnel with SHA-256 cryptographic verification.
 4. Generate 100% unique, high-entropy cryptographic keys for all protocols (UUID, x25519 Reality keypairs, Hysteria 2 / Salamander passwords, Shadowsocks-2022 AEAD keys, WireGuard keypairs, and a 128-bit Master Subscription Token `ft_sec_...`).
 5. Configure AdGuard Home on private/loopback listeners; query logging and statistics are disabled in the reference config, while DNS and host-provider metadata remain deployment-dependent.
 6. Leave SSH authentication unchanged by default. SSH/PAM changes require explicit `FORTRESS_CONFIGURE_SSH_2FA=1`, an enrolled `FORTRESS_ADMIN_USER`, and verified recovery access. Portal TOTP is separate and opt-in; never reuse the SSH seed.

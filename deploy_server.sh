@@ -132,15 +132,15 @@ if [ "$(findmnt -n -o FSTYPE --target "$RAM_DIR" 2>/dev/null || true)" != "tmpfs
 fi
 chown -R "$FORTRESS_USER:$FORTRESS_USER" "$RAM_DIR"
 
-# 4. Install Sing-box 1.11+ Core with Architecture & SHA-256 Verification
-SINGBOX_VER="1.11.4"
+# 4. Install current pinned core with architecture and SHA-256 verification
+SINGBOX_VER="1.14.2"
 echo "[*] Downloading Sing-box v${SINGBOX_VER} for ${SB_ARCH}..."
 SB_TAR="sing-box-${SINGBOX_VER}-linux-${SB_ARCH}.tar.gz"
 SB_URL="https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/${SB_TAR}"
 
 case "$SB_ARCH" in
-    amd64) EXPECTED_SB_SHA256="0bb762ef286b36c2016d9107fc1f089be7a75f6d579b33f067d31e696c05927e" ;;
-    arm64) EXPECTED_SB_SHA256="4e687359db42b6a28ef93f9cd2cb9549c4b0079cc7e49bc5f6ecbf98257a2507" ;;
+    amd64) EXPECTED_SB_SHA256="a684484d7477d1437282ee411f4d131d0340aaad60a7868841ebd5d87dd8a0c6" ;;
+    arm64) EXPECTED_SB_SHA256="b43a1fb1bda131c6653576741ce527eb2bdeab7c9308ca90ee8b972abb7e4a7f" ;;
 esac
 
 curl -fSL --connect-timeout 15 --max-time 180 "$SB_URL" -o "${WORK_DIR}/${SB_TAR}"
@@ -437,26 +437,18 @@ echo "[*] Generating Sing-box core configuration in RAM..."
 SERVER_DNS_JSON='{
     "servers": [
       {
+        "type": "udp",
         "tag": "sovereign-adguard",
-        "address": "127.0.0.1:5335",
-        "detour": "direct"
+        "server": "127.0.0.1",
+        "server_port": 5335
       }
     ],
-    "rules": [
-      {
-        "outbound": "any",
-        "server": "sovereign-adguard"
-      }
-    ],
-    "strategy": "prefer_ipv4"
+    "strategy": "ipv4_only"
   }'
 
 cat <<EOF > "$RAM_DIR/config.json"
 {
-  "log": {
-    "level": "warn",
-    "timestamp": false
-  },
+  "log": {"disabled": true},
   "dns": ${SERVER_DNS_JSON},
   "inbounds": [
     {
@@ -477,7 +469,8 @@ cat <<EOF > "$RAM_DIR/config.json"
           "enabled": true,
           "handshake": {
             "server": "${REALITY_SNI}",
-            "server_port": 443
+            "server_port": 443,
+            "domain_resolver": "sovereign-adguard"
           },
           "private_key": "${REALITY_PRIV}",
           "short_id": ["${REALITY_SHORTID}"]
@@ -554,19 +547,20 @@ cat <<EOF > "$RAM_DIR/config.json"
     {
       "type": "direct",
       "tag": "direct"
-    },
-    {
-      "type": "block",
-      "tag": "block"
     }
   ],
   "route": {
+    "default_domain_resolver": "sovereign-adguard",
     "auto_detect_interface": true,
     "rules": [
       {
         "ip_cidr": ["10.8.0.1/32", "127.0.0.1/32"],
         "port": 5335,
         "outbound": "direct"
+      },
+      {
+        "action": "resolve",
+        "strategy": "ipv4_only"
       },
       {
         "ip_is_private": true,

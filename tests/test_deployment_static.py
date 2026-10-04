@@ -54,6 +54,12 @@ class DeploymentScriptTests(unittest.TestCase):
         self.assertNotIn('google_authenticator', init)
         self.assertNotIn('chown -R', init)
 
+    def test_fresh_server_uses_current_core_and_typed_private_dns(self):
+        self.assertIn('SINGBOX_VER="1.14.2"', self.script)
+        self.assertIn('"type": "udp"', self.script)
+        self.assertIn('"default_domain_resolver": "sovereign-adguard"', self.script)
+        self.assertNotIn('"type": "block"', self.script)
+
     def test_ssh_policy_is_opt_in(self):
         self.assertIn('FORTRESS_CONFIGURE_SSH_2FA:-0', self.script)
 

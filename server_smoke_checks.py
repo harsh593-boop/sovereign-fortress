@@ -62,6 +62,10 @@ def main():
     check('Invalid Unicode login rejected safely', request('/portal/login', 'POST', 'auth_credential=invalid%E2%98%83')[0] == 401)
     check('OTP alone cannot authenticate portal', request('/portal/login', 'POST', 'auth_credential=123456')[0] == 401)
     check('OTP subscription URL retired', request('/sub/123456')[0] == 302)
+    installed_version = subprocess.check_output(['/usr/local/bin/sing-box', 'version']).splitlines()[0]
+    if installed_version not in (b'sing-box version 1.11.4', b'sing-box version 1.14.2'):
+        raise RuntimeError('Unsupported installed core version')
+    installed_core = '1.14' if installed_version == b'sing-box version 1.14.2' else '1.11'
     for mode in ('full', 'traffic-only'):
         for core in ('1.11', '1.14'):
             status, _, body = request('/sub/' + token + '?mode=' + mode + '&core=' + core)
@@ -74,13 +78,13 @@ def main():
                 check(prefix + ' no DNS hijack', not any(r.get('action') == 'hijack-dns' for r in rules))
             if core == '1.14':
                 check(prefix + ' explicit TUN DNS mode', profile['inbounds'][0].get('dns_mode') == ('disabled' if mode == 'traffic-only' else 'hijack'))
-            else:
+            if core == installed_core:
                 fd, path = tempfile.mkstemp(dir='/run/fortress', prefix='.smoke-profile-')
                 try:
                     with os.fdopen(fd, 'w') as f:
                         json.dump(profile, f)
                     result = subprocess.run(['/usr/local/bin/sing-box', 'check', '-c', path], capture_output=True)
-                    check(prefix + ' actual server-core schema check', result.returncode == 0)
+                    check(prefix + ' actual installed-core schema check', result.returncode == 0)
                 finally:
                     os.unlink(path)
     for transport in ('udp', 'tcp'):

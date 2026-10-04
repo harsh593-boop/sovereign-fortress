@@ -9,6 +9,7 @@ import base64
 import importlib.util
 import json
 import os
+import re
 from pathlib import Path
 import secrets
 import subprocess
@@ -41,6 +42,7 @@ def main():
         sub.UUID = str(uuid.uuid4())
         keys = subprocess.check_output([args.legacy, 'generate', 'reality-keypair'], text=True)
         sub.REALITY_PUBKEY = next(line.split(':', 1)[1].strip() for line in keys.splitlines() if line.startswith('PublicKey'))
+        reality_private = next(line.split(':', 1)[1].strip() for line in keys.splitlines() if line.startswith('PrivateKey'))
         sub.REALITY_SHORTID = secrets.token_hex(8)
         sub.HY2_PASSWORD = secrets.token_hex(16)
         sub.SALAMANDER_PASSWORD = secrets.token_hex(16)
@@ -92,6 +94,28 @@ def main():
                         print(result.stderr)
                         raise RuntimeError(f'Example {name} rejected')
                     print(f'PASS {name}: Sing-box {expected}')
+                # Validate the first-install server heredoc too; do not execute
+                # the installer or load any deployment values.
+                source = (ROOT / 'deploy_server.sh').read_text()
+                dns_match = re.search(r"SERVER_DNS_JSON='(.*?)'", source, re.S)
+                server_match = re.search(r'cat <<EOF > "\$RAM_DIR/config.json"\n(.*?)\nEOF', source, re.S)
+                if not dns_match or not server_match:
+                    raise RuntimeError('Expected reviewed server template not found')
+                (fixture / 'cert.pem').write_bytes((fixture / 'ca.crt').read_bytes())
+                (fixture / 'key.pem').write_bytes((fixture / 'fixture.key').read_bytes())
+                values = {'SERVER_DNS_JSON': dns_match.group(1), 'UUID': sub.UUID,
+                          'REALITY_SNI': sub.REALITY_SNI, 'REALITY_PRIV': reality_private,
+                          'REALITY_SHORTID': sub.REALITY_SHORTID, 'HY2_PASS': sub.HY2_PASSWORD,
+                          'SALAMANDER_PASS': sub.SALAMANDER_PASSWORD, 'SS_PASS': sub.SS_PASSWORD,
+                          'RAM_DIR': directory}
+                server_text = re.sub(r'\$\{([A-Z0-9_]+)\}', lambda match: values[match.group(1)], server_match.group(1))
+                path = fixture / 'server.json'
+                path.write_text(json.dumps(json.loads(server_text)))
+                result = subprocess.run([binary, 'check', '-c', str(path)], capture_output=True, text=True)
+                if result.returncode:
+                    print(result.stderr)
+                    raise RuntimeError('Fresh server template rejected')
+                print(f'PASS first-install server template: Sing-box {expected}')
     return 0
 
 

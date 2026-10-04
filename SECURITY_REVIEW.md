@@ -4,6 +4,22 @@
 protection claims. It intentionally excludes deployment addresses, hostnames,
 credentials, private profiles, and raw diagnostic logs.
 
+## Latest continuation
+
+The application core is now **1.14.2** on the audited VPS, with typed private DNS
+and an explicit Reality handshake resolver. A checksum-verified isolated instance
+passed all five transports before the file-backed production upgrade. Current
+and legacy clients then passed **5/5** local VPS transport checks. The OS itself
+was not upgraded; Windows networking enforcement remains blocked on administrator
+access. See [HOST_MAINTENANCE.md](HOST_MAINTENANCE.md).
+
+Synchronized client-path capture observed UDP 8443 requests/replies but no arriving
+9443/9444 packets during their failed probes. This is a pre-guest drop, not a
+proven daemon-authentication bug; OCI ingress and the client network need review.
+Read-only Windows readiness checks and the full fail-closed design/test matrix are
+in [WINDOWS_NETWORK_READINESS.md](WINDOWS_NETWORK_READINESS.md). No actual kill
+switch was implemented by that diagnostic.
+
 ## Remediated and checked
 
 ### Existing-server migration
@@ -106,9 +122,9 @@ independent revocation across every previously exposed system is not proven here
 
 | Check | Observed result |
 | --- | --- |
-| Standard-library offline regressions | 94 passed |
+| Standard-library offline regressions | 111 passed locally, including native audit fixtures |
 | Offline policy verifier | 6/6 passed |
-| Actual pinned engine checks | 4 generated profiles + 2 current examples passed |
+| Actual pinned engine checks | 4 generated profiles + 2 current examples + current first-install server template passed |
 | ShellCheck 0.11.0 / Bash syntax | Passed for installer and initializer |
 | Repository worktree + Git-object privacy scan | Passed; detection aid only |
 | Live server smoke checks | 37/37 passed, secrets omitted |
@@ -116,23 +132,28 @@ independent revocation across every previously exposed system is not proven here
 | Native Windows DPAPI / synthetic NTFS conversion | Passed |
 | Native Windows encrypted GUI config load | Passed |
 | Native Windows 1.14.2 real private-profile schema checks | Both passed; no TUN started |
-| Proxy-only HTTPS smoke from WSL, current client | 2/5 passed: standard Hysteria2 and Shadowsocks |
-| Proxy-only HTTPS smoke on VPS loopback, legacy client | 3/5 passed: standard Hysteria2, TUIC, Shadowsocks |
+| Proxy-only HTTPS smoke from WSL after current-core upgrade | 3/5 passed: Reality, standard Hysteria2 and Shadowsocks |
+| Proxy-only HTTPS smoke on current VPS core | 5/5 passed with current and legacy clients |
+| Read-only Windows readiness audit | Executed; no admin token, active TUN/service or verified kill switch |
 | Loopback management access through successful proxies | Rejected |
 
-Reality and Salamander failed the tested HTTPS smoke on both paths. TUIC passed
-locally on the VPS but failed from the WSL path. Credential comparisons matched
-the running server and the Reality target resolved/reached TLS 1.3, but the
-remaining transport failures are **unresolved**, not dismissed as network faults.
-These smoke tests do not establish browser, WebRTC, UDP, or TUN failure safety.
+Earlier Reality/Salamander failures on the legacy core recovered after restart;
+that did not establish a permanent root cause. The application core was subsequently
+upgraded only after isolated validation. All five now pass local VPS probes with
+both validated client versions. TUIC and Salamander still fail from the tested WSL
+path, with no arriving packets on those ports in a synchronized guest capture.
+The upstream drop is **unresolved** pending provider/network authority. These smoke
+tests do not establish browser, WebRTC, UDP, or TUN failure safety.
 
 ## Blocking release gates
 
-1. Diagnose the failing transports and test the automatic selector across real
-   destinations, UDP/TCP, MTUs, reconnects, and restricted/unrestricted networks.
+1. Correct/review the pre-guest UDP drops with OCI/network authority and retest
+   the automatic selector across real destinations, UDP/TCP, MTUs, reconnects,
+   long-running service state, and restricted/unrestricted approved networks.
 2. Establish a supported/maintained host OS and current server-core upgrade plan
    with a VM snapshot, console recovery, SSH verification, and rollback. Legacy
-   host extended-security coverage and post-quantum SSH negotiation are unverified.
+   host has no attached extended-security subscription; post-quantum SSH was not
+   negotiated. Proxy-core modernization alone does not resolve OS maintenance.
 3. Implement and test independent Windows WFP/firewall fail-closed behavior:
    client crash, TUN removal, reboot, sleep/wake, roaming, interface changes, VPS
    outage, and IPv6 reappearance. No such persistent policy was installed here.
