@@ -34,9 +34,12 @@ upgrade the OS, rotate endpoint credentials, or replace default firewall policie
 - AdGuard uses the actual root-level `querylog` / `statistics` sections:
   query collection, query file logging, statistics, and application logging are
   disabled. Obsolete `dns.querylog_*` keys were ineffective.
-- The management UI binds to loopback; DNS binds only to loopback and the private
-  WireGuard address, with client restrictions. Unused incoming DoT/DoQ listeners
-  are disabled. Existing encrypted upstreams and filter choices are preserved.
+- The management UI binds to the private WireGuard address; DNS binds only to
+  loopback/private WireGuard addresses with client restrictions. Incoming plain
+  DNS is disabled; private DoT/DoQ use 853 and private DoH uses 8445 with the
+  validated DuckDNS certificate. DNSCrypt remains staged until its provider
+  config/stamp is independently verified. Existing encrypted upstreams and
+  filter choices are preserved.
 - A root-owned persistent AdGuard template is restored into a writable RAM
   config and working directory. This version rewrites config at startup and
   fails if its active config is read-only; that failure was reproduced and fixed.
@@ -82,9 +85,10 @@ replay protection, and multi-user provisioning require further design/testing.
 
 - The DNS hijack rule is restricted to recognized DNS after sniffing. An
   unconditional hijack could divert non-DNS application traffic into DNS handling.
-- Profiles are explicitly versioned: validated legacy 1.11.4 and current 1.14.2.
-  Current examples use typed DNS, reject actions, WireGuard endpoints, and 1.14
-  TUN DNS mode. Legacy fields removed by 1.14 are not silently reused.
+- Profiles are explicitly versioned. Current Full-Tunnel is 1.14.2-only because
+  legacy 1.11 Full-Tunnel would require plaintext/legacy DNS semantics. Legacy
+  1.11 Traffic-Only remains a compatibility profile. Current examples use typed
+  encrypted DNS, reject actions, WireGuard endpoints, and 1.14 TUN DNS mode.
 - Full-Tunnel captures IPv6 and rejects it while active; private VPS DNS uses a
   proxy detour. This is not a persistent firewall kill switch.
 - Traffic-Only sets 1.14 `dns_mode: disabled`, narrows provider exceptions, and
@@ -122,12 +126,12 @@ independent revocation across every previously exposed system is not proven here
 
 | Check | Observed result |
 | --- | --- |
-| Standard-library offline regressions | 111 passed locally, including native audit fixtures |
+| Standard-library offline regressions | 119 passed locally, including encrypted-DNS/firewall fixtures |
 | Offline policy verifier | 6/6 passed |
 | Actual pinned engine checks | 4 generated profiles + 2 current examples + current first-install server template passed |
 | ShellCheck 0.11.0 / Bash syntax | Passed for installer and initializer |
 | Repository worktree + Git-object privacy scan | Passed; detection aid only |
-| Live server smoke checks | 37/37 passed, secrets omitted |
+| Live server smoke checks | 39/39 passed after encrypted DNS migration, secrets omitted |
 | Live systemd unit verification | Passed |
 | Native Windows DPAPI / synthetic NTFS conversion | Passed |
 | Native Windows encrypted GUI config load | Passed |
@@ -144,6 +148,18 @@ both validated client versions. TUIC and Salamander still fail from the tested W
 path, with no arriving packets on those ports in a synchronized guest capture.
 The upstream drop is **unresolved** pending provider/network authority. These smoke
 tests do not establish browser, WebRTC, UDP, or TUN failure safety.
+
+## Current encrypted-DNS state
+
+The VPS now uses a public DuckDNS certificate whose SAN matches the DuckDNS name.
+AdGuard v0.107.79 serves private DoT/DoQ on 853 and private DoH on 8445; plain
+DNS is disabled. The private admin UI is on the WireGuard address and must be
+accessed through a tunnel. A strong AdGuard web user still needs to be created
+interactively by the operator. DNSCrypt is intentionally not enabled: its server
+provider configuration and client stamp are separate cryptographic material and
+must be generated and verified before opening a private listener. The celenityy
+recommendation was not imported wholesale because it recommends enabling logs
+and statistics, which conflicts with the privacy requirement.
 
 ## Blocking release gates
 
@@ -177,6 +193,7 @@ tests do not establish browser, WebRTC, UDP, or TUN failure safety.
 - Sing-box migration: https://sing-box.sagernet.org/migration/
 - TUN routing/DNS limitations: https://sing-box.sagernet.org/configuration/inbound/tun/
 - WireGuard endpoint schema: https://sing-box.sagernet.org/configuration/endpoint/wireguard/
-- AdGuard v0.107.56 configuration source: https://github.com/AdguardTeam/AdGuardHome/tree/v0.107.56/internal (navigate to `home`, then `config.go`)
+- AdGuard Home v0.107.79 configuration: https://adguard-dns.io/kb/adguard-home/configuration/
+- AdGuard DNS encryption: https://adguard-dns.io/kb/adguard-home/encryption/
 - AdGuard configuration: https://adguard-dns.io/kb/adguard-home/configuration/
 - Shadowsocks-2022 URI requirements: https://shadowsocks.org/doc/sip002.html

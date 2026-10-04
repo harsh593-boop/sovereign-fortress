@@ -56,9 +56,18 @@ class DeploymentScriptTests(unittest.TestCase):
 
     def test_fresh_server_uses_current_core_and_typed_private_dns(self):
         self.assertIn('SINGBOX_VER="1.14.2"', self.script)
-        self.assertIn('"type": "udp"', self.script)
+        self.assertIn('"type": "tls"', self.script)
+        self.assertIn('"server_port": 853', self.script)
         self.assertIn('"default_domain_resolver": "sovereign-adguard"', self.script)
+        self.assertIn('serve_plain_dns: false', self.script)
+        self.assertIn('port_dns_over_quic: 853', self.script)
+        self.assertIn('fortress-adguard-update.timer', self.script)
         self.assertNotIn('"type": "block"', self.script)
+
+    def test_adguard_update_is_pinned_and_os_updates_are_not_automatic_reboots(self):
+        self.assertIn('AGH_VER="0.107.79"', self.script)
+        self.assertIn('Automatic-Reboot "false"', self.script)
+        self.assertIn('Package-Blacklist { "sing-box"; "wstunnel"; "AdGuardHome"; }', self.script)
 
     def test_ssh_policy_is_opt_in(self):
         self.assertIn('FORTRESS_CONFIGURE_SSH_2FA:-0', self.script)

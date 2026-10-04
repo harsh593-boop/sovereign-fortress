@@ -32,6 +32,22 @@ The older `apply_server_remediation.py` is deliberately constrained to the
 validated **1.11.4** deployment. Do not rerun that legacy migration on an upgraded
 core or remove its version guard. File rollback is not a boot-volume snapshot.
 
+## AdGuard version, encrypted DNS, and update policy
+
+AdGuard Home is now official v0.107.79, upgraded with a published archive hash
+and a private rollback backup. Security-only Ubuntu unattended-upgrades are
+enabled with automatic reboot disabled; manually managed Sing-box, wstunnel and
+AdGuard binaries are excluded from generic APT replacement. A weekly official
+AdGuard self-update timer runs with root-only binary/config backup and service
+health rollback. This is not a substitute for supported OS lifecycle coverage.
+
+The current AdGuard policy has query logging/statistics/application logging
+ disabled, plain DNS disabled, private DoT/DoQ on port 853, and private DoH on
+port 8445 using the active certificate. Public exposure is blocked by guest
+firewall policy and must also be reviewed in OCI. DNSCrypt is deliberately
+staged: it requires a verified provider configuration and stamp; opening a
+DNSCrypt port without that material would be unsafe.
+
 ## UDP ingress gate
 
 After core recovery/upgrade, all five protocols passed local VPS tests. From the

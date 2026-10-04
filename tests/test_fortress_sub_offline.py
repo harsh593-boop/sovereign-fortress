@@ -27,26 +27,29 @@ class ProfileRegressionTests(unittest.TestCase):
         fortress_sub.DNS_PORT = 5335
         fortress_sub.DOMAIN = ""
 
-    def test_full_mode_uses_remote_dns_and_blocks_ipv6(self):
-        config = fortress_sub.get_singbox_json_config("full")
+    def test_full_mode_uses_encrypted_remote_dns_and_blocks_ipv6(self):
+        fortress_sub.DOMAIN = "example.test"
+        config = fortress_sub.get_singbox_json_config("full", core="1.14")
         dns_server = config["dns"]["servers"][0]
-        self.assertEqual(dns_server["address"], "tcp://10.8.0.1:5335")
+        self.assertEqual(dns_server["type"], "tls")
+        self.assertEqual(dns_server["server"], "10.8.0.1")
+        self.assertEqual(dns_server["server_port"], 853)
         self.assertEqual(dns_server["detour"], "proxy")
-        self.assertNotIn("127.0.0.1", dns_server["address"])
+        self.assertEqual(dns_server["tls"]["server_name"], "example.test")
         tun = config["inbounds"][0]
         self.assertTrue(tun["strict_route"])
         self.assertNotIn("10.0.0.0/8", tun["route_exclude_address"])
         self.assertEqual(config["route"]["rules"][0]["ip_cidr"], ["::/0"])
-        self.assertEqual(config["route"]["rules"][0]["outbound"], "block-ipv6")
+        self.assertEqual(config["route"]["rules"][0]["action"], "reject")
 
     def test_traffic_only_keeps_private_direct_exceptions(self):
-        config = fortress_sub.get_singbox_json_config("traffic-only")
+        config = fortress_sub.get_singbox_json_config("traffic-only", core="1.14")
         tun = config["inbounds"][0]
         self.assertFalse(tun["strict_route"])
         self.assertIn("10.0.0.0/8", tun["route_exclude_address"])
         self.assertIn("172.16.0.0/12", tun["route_exclude_address"])
         self.assertIn("192.168.0.0/16", tun["route_exclude_address"])
-        self.assertEqual(config["route"]["rules"][0]["outbound"], "block-ipv6")
+        self.assertEqual(config["route"]["rules"][0]["action"], "reject")
         self.assertTrue(any(rule.get("protocol") == "dns" and rule.get("outbound") == "direct"
                             for rule in config["route"]["rules"]))
 
@@ -82,7 +85,8 @@ class ProfileRegressionTests(unittest.TestCase):
     def test_full_example_never_sends_plaintext_dns_to_public_endpoint(self):
         profile = json.loads((ROOT / "fortress-full-tunnel.example.json").read_text(encoding="utf-8"))
         self.assertEqual(profile["dns"]["servers"][0]["server"], "10.8.0.1")
-        self.assertEqual(profile["dns"]["servers"][0]["server_port"], 5335)
+        self.assertEqual(profile["dns"]["servers"][0]["server_port"], 853)
+        self.assertEqual(profile["dns"]["servers"][0]["type"], "tls")
         self.assertEqual(profile["dns"]["servers"][0]["detour"], "proxy")
 
     def test_dashboard_never_contains_ssh_enrollment_secret(self):
@@ -133,7 +137,7 @@ class ProfileRegressionTests(unittest.TestCase):
         self.assertIn("does not make an absolute zero-log", fortress_sub.PRIVACY_CONTENT_HTML)
 
     def test_generated_transport_never_disables_tls_verification(self):
-        config = fortress_sub.get_singbox_json_config("full")
+        config = fortress_sub.get_singbox_json_config("full", core="1.14")
         for outbound in config["outbounds"]:
             self.assertNotEqual(outbound.get("tls", {}).get("insecure"), True)
 

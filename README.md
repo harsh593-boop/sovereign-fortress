@@ -26,9 +26,10 @@ Can be evaluated on an OCI VM. Pricing, eligibility, bandwidth limits, and servi
 ## Current verification and supported profiles
 
 See [SECURITY_REVIEW.md](SECURITY_REVIEW.md) for evidence and open release gates.
-Current application-core migration/recovery and provider-authority steps are in
-[HOST_MAINTENANCE.md](HOST_MAINTENANCE.md); read-only Windows readiness and required
-administrator/packet-testing gates are in [WINDOWS_NETWORK_READINESS.md](WINDOWS_NETWORK_READINESS.md).
+Current application-core migration/recovery, encrypted DNS, automatic-update
+policy, and provider-authority steps are in [HOST_MAINTENANCE.md](HOST_MAINTENANCE.md);
+read-only Windows readiness and required administrator/packet-testing gates are in
+[WINDOWS_NETWORK_READINESS.md](WINDOWS_NETWORK_READINESS.md).
 The subscription defaults to **Sing-box 1.14** syntax. Request `&core=1.11`
 explicitly for the validated legacy 1.11.4 profile. The public JSON examples
 are **1.14** templates; do not load them unchanged into a 1.11 or 1.13 core.
@@ -37,7 +38,9 @@ import is not proof that either operating mode was preserved.
 
 Full-Tunnel and Traffic-Only both use TUN in the reference profiles. Traffic-Only
 means intended local DNS egress alongside tunneled payload traffic, **not**
-system-proxy-only mode. Arbitrary DoH cannot be identified universally.
+system-proxy-only mode. Full-Tunnel now uses private DoT to AdGuard; incoming
+plain DNS is disabled. Private DoH/DoQ are available on the WireGuard address;
+DNSCrypt is not enabled until a verified provider configuration is provisioned. Arbitrary DoH cannot be identified universally.
 
 Private Windows client files belong under `%LOCALAPPDATA%\\SovereignFortress`,
 not the public checkout. The GUI can load a user-bound DPAPI `.enc` config
@@ -125,7 +128,7 @@ flowchart LR
 
     subgraph ModeB["Mode B: Full Traffic (Self-Hosted Sovereign DNS)"]
         TunnelDNS["Forced Sing-box TUN / Inbound DNS"]
-        LocalAdGuard["Oracle VM AdGuard Home (Port 5335)\nQuery logging disabled in the reference config\nUpstream and host visibility remain deployment-dependent"]
+        LocalAdGuard["Private AdGuard Home (DoT/DoQ 853, DoH 8445)\nPlain DNS disabled; query logging/statistics disabled\nUpstream and host visibility remain deployment-dependent"]
     end
 
     AppQuery -->|YogaDNS Active| IntranetMatch
@@ -206,7 +209,7 @@ The automated installer will:
 2. Optionally mount a 256 MB volatile RAM disk (`tmpfs`) at `/run/fortress` for selected runtime state; verify host logging separately.
 3. Install pinned Sing-box 1.14.2 Core and WSTunnel with SHA-256 cryptographic verification.
 4. Generate 100% unique, high-entropy cryptographic keys for all protocols (UUID, x25519 Reality keypairs, Hysteria 2 / Salamander passwords, Shadowsocks-2022 AEAD keys, WireGuard keypairs, and a 128-bit Master Subscription Token `ft_sec_...`).
-5. Configure AdGuard Home on private/loopback listeners; query logging and statistics are disabled in the reference config, while DNS and host-provider metadata remain deployment-dependent.
+5. Configure AdGuard Home on private WireGuard/loopback listeners with private DoT/DoQ (853) and DoH (8445); incoming plain DNS is disabled, while DNS and host-provider metadata remain deployment-dependent.
 6. Leave SSH authentication unchanged by default. SSH/PAM changes require explicit `FORTRESS_CONFIGURE_SSH_2FA=1`, an enrolled `FORTRESS_ADMIN_USER`, and verified recovery access. Portal TOTP is separate and opt-in; never reuse the SSH seed.
 7. Enforce strict firewall policies and disable IPv6 to prevent network leaks.
 8. Launch the dynamic HTTPS subscription daemon and management portal on port `8443`.
@@ -297,6 +300,8 @@ See [`yogadns_rules.md`](yogadns_rules.md) for full step-by-step instructions:
 * **Portal authentication:** High-entropy bearer token, with a separate optional second factor. Short OTPs alone cannot authenticate or export profiles; subscription URLs require the bearer token.
 * **Active Defense Camouflage:** Unauthorized requests automatically detour to Apple CDN edge.
 * **Optional Volatile Runtime:** Selected active state can operate in `/run/fortress` (`tmpfs`); operators must verify mounts, service permissions, host logs, and persistent templates themselves.
+* **Encrypted DNS:** The current VPS uses a DuckDNS-certificate-backed private DoT/DoQ endpoint on 853 and private DoH on 8445. Incoming plain DNS is disabled. DNSCrypt is not enabled until a verified provider configuration/stamp is provisioned.
+* **Automatic maintenance:** Ubuntu security updates are enabled without automatic reboot. AdGuard has a weekly official self-update timer with root-only backup and service-health rollback. Sing-box and wstunnel remain separately pinned and reviewed.
 * **Client DPAPI Protection:** Local keys encrypted at rest using Windows user-bound DPAPI (`CryptProtectData`).
 * **Local Cleanup Helper:** `Shred-Fortress.ps1` can remove local working files, but storage, filesystem, and backup behavior determine whether recovery is possible.
 

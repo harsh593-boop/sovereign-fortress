@@ -76,7 +76,22 @@ echo iptables-persistent iptables-persistent/autosave_v6 boolean true | debconf-
 apt-get update -y
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
     curl wget unzip tar iptables iptables-persistent netfilter-persistent ufw libpam-google-authenticator \
-    qrencode jq openssl python3 dnsutils bsdmainutils fail2ban wireguard-tools
+    qrencode jq openssl python3 dnsutils bsdmainutils fail2ban wireguard-tools unattended-upgrades apt-listchanges
+
+# Security updates are automatic; kernel reboot is never automatic. ESM remains
+# unavailable until the operator attaches Ubuntu Pro or migrates to supported LTS.
+cat <<'EOF' > /etc/apt/apt.conf.d/52-fortress-unattended-upgrades
+Unattended-Upgrade::Origins-Pattern {
+  "origin=Ubuntu,codename=${distro_codename}-security";
+};
+Unattended-Upgrade::Automatic-Reboot "false";
+Unattended-Upgrade::Remove-Unused-Dependencies "false";
+Unattended-Upgrade::Package-Blacklist { "sing-box"; "wstunnel"; "AdGuardHome"; };
+EOF
+cat <<'EOF' > /etc/apt/apt.conf.d/20auto-upgrades
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+EOF
 
 # Determine the egress interface from the active default route.  Do not assume
 # a cloud-provider-specific name such as ens3.
@@ -258,11 +273,17 @@ PIN_SHA256=$(openssl x509 -in "$RAM_DIR/cert.pem" -pubkey -noout | openssl pkey 
 
 # 8. Configure self-hosted AdGuard Home DNS with disabled application query logs
 echo "[*] Configuring AdGuard Home on 127.0.0.1:5335 & 10.8.0.1:5335..."
-AGH_URL="https://github.com/AdguardTeam/AdGuardHome/releases/download/v0.107.56/AdGuardHome_linux_${SB_ARCH}.tar.gz"
-if [[ ! "${FORTRESS_AGH_SHA256:-}" =~ ^[a-fA-F0-9]{64}$ ]]; then
-    echo "[-] Set FORTRESS_AGH_SHA256 to the independently verified SHA-256 of the pinned AdGuard Home archive."
+AGH_VER="0.107.79"
+AGH_URL="https://github.com/AdguardTeam/AdGuardHome/releases/download/v${AGH_VER}/AdGuardHome_linux_${SB_ARCH}.tar.gz"
+case "$SB_ARCH" in
+    amd64) EXPECTED_AGH_SHA256="c48f4a43000665484c5ec28177de11a004759b620dae8f77b2aabefc9ef3687f" ;;
+    arm64) EXPECTED_AGH_SHA256="3f7893c18e8aaadc456d0452839190561c306ca95175a2254958be80a769c1ae" ;;
+esac
+if [ -n "${FORTRESS_AGH_SHA256:-}" ] && [ "${FORTRESS_AGH_SHA256,,}" != "$EXPECTED_AGH_SHA256" ]; then
+    echo "[-] FORTRESS_AGH_SHA256 does not match the reviewed pinned archive."
     exit 1
 fi
+FORTRESS_AGH_SHA256="$EXPECTED_AGH_SHA256"
 AGH_DIR="/opt/AdGuardHome"
 AGH_DATA_DIR="${AGH_DIR}/data"
 AGH_CONFIG="${AGH_DIR}/AdGuardHome.yaml"
@@ -363,14 +384,16 @@ dns:
   max_goroutines: 300
   handle_ddr: false
   use_private_ptr_resolvers: false
-  serve_plain_dns: true
+  serve_plain_dns: false
 tls:
-  enabled: false
+  enabled: true
   server_name: "${DOMAIN}"
-  force_https: false
-  port_https: 0
-  port_dns_over_tls: 0
-  port_dns_over_quic: 0
+  force_https: true
+  port_https: 8445
+  port_dns_over_tls: 853
+  port_dns_over_quic: 853
+  port_dnscrypt: 0
+  allow_unencrypted_doh: false
   certificate_path: "${RAM_DIR}/cert.pem"
   private_key_path: "${RAM_DIR}/key.pem"
 filters: []
@@ -434,17 +457,21 @@ echo "[+] AdGuard Home configured; it will start after WireGuard creates 10.8.0.
 
 # 9. Generate hardened Sing-box configuration (IPv4-bound reference profile)
 echo "[*] Generating Sing-box core configuration in RAM..."
-SERVER_DNS_JSON='{
-    "servers": [
-      {
-        "type": "udp",
-        "tag": "sovereign-adguard",
-        "server": "127.0.0.1",
-        "server_port": 5335
-      }
-    ],
-    "strategy": "ipv4_only"
-  }'
+SERVER_DNS_JSON=$(cat <<EOF
+{
+  "servers": [
+    {
+      "type": "tls",
+      "tag": "sovereign-adguard",
+      "server": "127.0.0.1",
+      "server_port": 853,
+      "tls": {"server_name": "${DOMAIN}"}
+    }
+  ],
+  "strategy": "ipv4_only"
+}
+EOF
+)
 
 cat <<EOF > "$RAM_DIR/config.json"
 {
@@ -555,7 +582,7 @@ cat <<EOF > "$RAM_DIR/config.json"
     "rules": [
       {
         "ip_cidr": ["10.8.0.1/32", "127.0.0.1/32"],
-        "port": 5335,
+        "port": 853,
         "outbound": "direct"
       },
       {
@@ -715,6 +742,37 @@ chmod 600 "$DISK_DIR/wg0.conf"
 chown root:root "$DISK_DIR/wg0.conf"
 
 install -m 0755 fortress-init.sh /usr/local/bin/fortress-init.sh
+install -m 0755 fortress-adguard-update.sh /usr/local/sbin/fortress-adguard-update.sh
+cat <<'EOF' > /etc/systemd/system/fortress-adguard-update.service
+[Unit]
+Description=Fortress verified AdGuard Home official self-update
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/fortress-adguard-update.sh
+User=root
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/opt/AdGuardHome /run/fortress /root/fortress-backups
+StandardOutput=null
+StandardError=null
+EOF
+cat <<'EOF' > /etc/systemd/system/fortress-adguard-update.timer
+[Unit]
+Description=Weekly Fortress AdGuard Home update check
+
+[Timer]
+OnCalendar=Sun *-*-* 04:20:00
+RandomizedDelaySec=2h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
 
 cat <<EOF > /etc/systemd/system/fortress-init.service
 [Unit]
@@ -946,7 +1004,7 @@ chmod 600 "$RAM_DIR/wireguard/wg0.conf"
 /usr/local/bin/fortress-init.sh
 /usr/local/bin/sing-box check -c "$RAM_DIR/config.json"
 systemctl daemon-reload
-systemctl enable fortress-init fortress-core fortress-wstunnel fortress-sub wg-quick@wg0
+systemctl enable fortress-init fortress-core fortress-wstunnel fortress-sub fortress-adguard-update.timer wg-quick@wg0
 systemctl restart fortress-init fortress-core fortress-wstunnel fortress-sub wg-quick@wg0
 systemctl restart adguard-home
 

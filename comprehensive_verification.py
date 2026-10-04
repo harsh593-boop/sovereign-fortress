@@ -29,17 +29,18 @@ if "--offline" in sys.argv:
     fortress_sub.SERVER_IP = "198.51.100.10"
     fortress_sub.DNS_PORT = 5335
     fortress_sub.DOMAIN = ""
-    full = fortress_sub.get_singbox_json_config("full")
-    traffic = fortress_sub.get_singbox_json_config("traffic-only")
+    full = fortress_sub.get_singbox_json_config("full", core="1.14")
+    traffic = fortress_sub.get_singbox_json_config("traffic-only", core="1.14")
     full_dns = full["dns"]["servers"][0]
     traffic_rules = traffic["route"]["rules"]
     checks = [
         full_dns.get("detour") == "proxy",
-        "127.0.0.1" not in full_dns.get("address", ""),
+        full_dns.get("type") == "tls" and full_dns.get("server_port") == 853,
+        full_dns.get("tls", {}).get("server_name") == fortress_sub.DOMAIN,
         any(r.get("action") == "hijack-dns" for r in full["route"]["rules"]),
         not any(r.get("action") == "hijack-dns" for r in traffic_rules),
         any(r.get("protocol") == "dns" and r.get("outbound") == "direct" for r in traffic_rules),
-        any(r.get("outbound") == "block-ipv6" for r in traffic_rules),
+        any(r.get("action") == "reject" and r.get("ip_cidr") == ["::/0"] for r in traffic_rules),
     ]
     print(f"OFFLINE VERIFICATION: {sum(checks)} passed / {len(checks)} checks")
     sys.exit(0 if all(checks) else 1)

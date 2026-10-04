@@ -76,7 +76,8 @@ def main():
             version = subprocess.check_output([binary, 'version'], text=True).splitlines()[0]
             if version != 'sing-box version ' + expected:
                 raise RuntimeError('Unexpected validation binary version')
-            for mode in ('full', 'traffic-only'):
+            modes = ('traffic-only',) if core == '1.11' else ('full', 'traffic-only')
+            for mode in modes:
                 path = fixture / 'generated.json'
                 path.write_text(json.dumps(sub.get_singbox_json_config(mode, core=core)))
                 result = subprocess.run([binary, 'check', '-c', str(path)], capture_output=True, text=True)
@@ -85,6 +86,13 @@ def main():
                     print(result.stderr)
                     raise RuntimeError(f'Generated {mode} / {expected} config rejected')
                 print(f'PASS generated {mode}: Sing-box {expected}')
+            if core == '1.11':
+                try:
+                    sub.get_singbox_json_config('full', core=core)
+                except ValueError:
+                    print('PASS retired insecure legacy full profile: Sing-box 1.11.4')
+                else:
+                    raise RuntimeError('Legacy full profile unexpectedly remained enabled')
             if core == '1.14':
                 for name in ('fortress-full-tunnel.example.json', 'fortress-traffic-only.example.json'):
                     path = fixture / 'example.json'

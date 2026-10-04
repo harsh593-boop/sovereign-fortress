@@ -131,10 +131,14 @@ class HTTPSIntegrationTests(unittest.TestCase):
     def test_subscriptions_default_to_modern_but_allow_explicit_legacy(self):
         for core in ('1.11', '1.14'):
             status, _, body = self.request('GET', '/sub/' + self.token + '?core=' + core)
+            if core == '1.11':
+                self.assertEqual(status, 400)
+                continue
             self.assertEqual(status, 200)
             config = json.loads(body)
             dns = config['dns']['servers'][0]
-            self.assertEqual('type' in dns, core == '1.14')
+            self.assertEqual(dns['type'], 'tls')
+            self.assertEqual(dns['server_port'], 853)
         status, _, _ = self.request('GET', '/sub/' + self.token + '?core=unknown')
         self.assertEqual(status, 400)
 

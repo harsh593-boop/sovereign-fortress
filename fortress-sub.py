@@ -784,8 +784,10 @@ def get_singbox_json_config(mode="full", core="1.11"):
     """
     if core not in ("1.11", "1.14"):
         raise ValueError("Supported profile cores are 1.11 and 1.14")
-    ipaddress.IPv4Address(SERVER_IP)  # This release supports numeric IPv4 endpoints only.
+    ipaddress.IPv4Address(SERVER_IP)
     is_traffic_only = is_traffic_only_mode(mode)
+    if core == "1.11" and not is_traffic_only:
+        raise ValueError("Full-Tunnel requires Sing-box 1.14+ encrypted DNS; legacy 1.11 full mode is retired")  # This release supports numeric IPv4 endpoints only.
     if not is_traffic_only and str(mode).lower() not in ('full', 'full-tunnel', 'full_tunnel'):
         raise ValueError("Unsupported routing mode")
     ca_pem = verified_private_ca()
@@ -844,8 +846,9 @@ def get_singbox_json_config(mode="full", core="1.11"):
                     # Connect to AdGuard on the VPS *through* the selected proxy.
                     # Never send plaintext DNS directly to the public endpoint.
                     # The private wg0 address is bound by the server-side resolver.
-                    "address": f"tcp://10.8.0.1:{DNS_PORT}",
-                    "detour": "proxy"
+                    "address": f"tls://10.8.0.1:853",
+                    "detour": "proxy",
+                    "tls": {"server_name": DOMAIN}
                 }
             ],
             "strategy": "prefer_ipv4"
@@ -1059,8 +1062,9 @@ def get_singbox_json_config(mode="full", core="1.11"):
     cfg["route"] = {"auto_detect_interface": True, "rules": rules}
     if core == "1.14":
         dns_server = ({"type": "local", "tag": "dns-direct"} if is_traffic_only else
-                      {"type": "tcp", "tag": "dns-remote", "server": "10.8.0.1",
-                       "server_port": DNS_PORT, "detour": "proxy"})
+                      {"type": "tls", "tag": "dns-remote", "server": "10.8.0.1",
+                       "server_port": 853, "detour": "proxy",
+                       "tls": {"server_name": DOMAIN}})
         cfg["dns"]["servers"] = [dns_server]
         cfg["inbounds"][0]["dns_mode"] = "disabled" if is_traffic_only else "hijack"
         cfg["outbounds"] = [o for o in cfg["outbounds"] if o["type"] != "block"]

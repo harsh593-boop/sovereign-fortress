@@ -80,17 +80,23 @@ class SubscriptionSecurityTests(unittest.TestCase):
         self.assertNotEqual(sub.session_csrf_token(a), '1')
 
     def test_full_hijack_is_matched_only_to_dns_after_sniffing(self):
-        cfg = sub.get_singbox_json_config('full', core='1.11')
+        cfg = sub.get_singbox_json_config('full', core='1.14')
         rules = cfg['route']['rules']
         hijack = [r for r in rules if r.get('action') == 'hijack-dns']
         self.assertEqual(hijack, [{'protocol': 'dns', 'action': 'hijack-dns'}])
         self.assertTrue(any(r.get('action') == 'sniff' for r in rules))
 
-    def test_modern_config_uses_typed_dns_endpoints_and_reject_actions(self):
+    def test_legacy_full_mode_is_retired_before_plain_dns_can_reappear(self):
+        with self.assertRaises(ValueError):
+            sub.get_singbox_json_config('full', core='1.11')
+
+    def test_modern_config_uses_typed_encrypted_dns_endpoints_and_reject_actions(self):
         cfg = sub.get_singbox_json_config('full', core='1.14')
         dns = cfg['dns']['servers'][0]
-        self.assertEqual(dns['type'], 'tcp')
+        self.assertEqual(dns['type'], 'tls')
         self.assertEqual(dns['server'], '10.8.0.1')
+        self.assertEqual(dns['server_port'], 853)
+        self.assertEqual(dns['tls']['server_name'], sub.DOMAIN)
         self.assertEqual(dns['detour'], 'proxy')
         self.assertNotIn('address', dns)
         self.assertFalse(any(o.get('type') in ('block', 'wireguard') for o in cfg['outbounds']))
@@ -108,7 +114,7 @@ class SubscriptionSecurityTests(unittest.TestCase):
         (self.ram / 'cert.pem').write_text('synthetic leaf')
         with patch.object(sub.subprocess, 'run') as verify:
             verify.return_value.returncode = 1
-            config = sub.get_singbox_json_config('full')
+            config = sub.get_singbox_json_config('full', core='1.14')
         for outbound in config['outbounds']:
             self.assertNotIn('certificate', outbound.get('tls', {}))
             self.assertNotEqual(outbound.get('tls', {}).get('insecure'), True)

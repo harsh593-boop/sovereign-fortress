@@ -5,11 +5,14 @@
   "dns": {
     "servers": [
       {
-        "type": "tcp",
+        "type": "tls",
         "tag": "dns-remote",
         "server": "10.8.0.1",
-        "server_port": 5335,
-        "detour": "proxy"
+        "server_port": 853,
+        "detour": "proxy",
+        "tls": {
+          "server_name": "<YOUR_TLS_SERVER_NAME>"
+        }
       }
     ],
     "strategy": "prefer_ipv4"
