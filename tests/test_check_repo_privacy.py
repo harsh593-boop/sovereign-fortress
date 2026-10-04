@@ -118,6 +118,26 @@ class PrivacyScannerTests(unittest.TestCase):
                                  '--root', str(repository)], capture_output=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stdout.decode(errors='replace') + result.stderr.decode(errors='replace'))
 
+    def test_git_directories_are_pruned_before_traversal(self) -> None:
+        from unittest.mock import patch
+        repository = self.make_repository()
+        self.addCleanup(lambda: __import__('shutil').rmtree(repository, ignore_errors=True))
+        (repository / 'safe.txt').write_text('safe fixture')
+        def walk(root, **kwargs):
+            directories = ['.git', 'safe-directory']
+            yield str(root), directories, ['safe.txt']
+            self.assertNotIn('.git', directories)
+        with patch.object(check_repo_privacy.os, 'walk', side_effect=walk):
+            self.assertEqual(check_repo_privacy.scan_repository(repository, include_history=False), [])
+
+    def test_unreadable_worktree_traversal_is_not_reported_as_clean(self) -> None:
+        from unittest.mock import patch
+        repository = self.make_repository()
+        self.addCleanup(lambda: __import__('shutil').rmtree(repository, ignore_errors=True))
+        with patch.object(check_repo_privacy, '_iter_worktree_files', side_effect=check_repo_privacy.ScanFailure('fixture')):
+            findings = check_repo_privacy.scan_repository(repository, include_history=False)
+        self.assertTrue(any(f.path == '[worktree]' and f.source == 'scan' for f in findings))
+
     def test_missing_root_is_not_reported_as_a_clean_scan(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             findings = check_repo_privacy.scan_repository(Path(directory) / 'missing')

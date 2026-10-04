@@ -156,16 +156,24 @@ def _relative_path(root: Path, path: Path) -> str:
 def _iter_worktree_files(root: Path) -> Iterator[Path]:
     """Yield regular files, including ignored/untracked files, but not .git or bytecode."""
 
-    for path in root.rglob("*"):
-        try:
-            relative = path.relative_to(root)
-            if ".git" in relative.parts or "__pycache__" in relative.parts or path.suffix == ".pyc" or path.is_symlink():
+    def traversal_error(error):
+        raise ScanFailure("Working tree could not be traversed") from error
+
+    # Prune before descending. rglob followed by filtering still enters Git's
+    # object directories, which background packing can remove while we scan.
+    for directory, directories, files in os.walk(root, topdown=True, followlinks=False, onerror=traversal_error):
+        base = Path(directory)
+        directories[:] = [name for name in directories
+                          if name not in ('.git', '__pycache__') and not (base / name).is_symlink()]
+        for name in files:
+            path = base / name
+            if name == '.git' or path.suffix == '.pyc' or path.is_symlink():
                 continue
-            if path.is_file():
-                yield path
-        except OSError:
-            # An unreadable file is reported by the caller; traversal continues.
-            continue
+            try:
+                if path.is_file():
+                    yield path
+            except OSError as error:
+                raise ScanFailure("Working tree metadata could not be read") from error
 
 
 def _configured_values(root: Path, environ: dict[str, str] | None = None) -> list[tuple[str, str]]:
@@ -377,16 +385,19 @@ def scan_repository(
 
     # Walk the filesystem instead of git ls-files: ignored credentials and
     # generated artifacts must be inspected before they can be published.
-    for path in _iter_worktree_files(root):
-        relative = _relative_path(root, path)
-        if _path_is_forbidden(relative):
-            add_all([Violation(relative, 0, "Sensitive artifact present in worktree", "path")])
-        try:
-            text = path.read_bytes().decode("utf-8", errors="replace")
-        except OSError:
-            add_all([Violation(relative, 0, "Unable to read worktree file", "worktree")])
-            continue
-        add_all(_scan_text(text, relative, "worktree", patterns))
+    try:
+        for path in _iter_worktree_files(root):
+            relative = _relative_path(root, path)
+            if _path_is_forbidden(relative):
+                add_all([Violation(relative, 0, "Sensitive artifact present in worktree", "path")])
+            try:
+                text = path.read_bytes().decode("utf-8", errors="replace")
+            except OSError:
+                add_all([Violation(relative, 0, "Unable to read worktree file", "worktree")])
+                continue
+            add_all(_scan_text(text, relative, "worktree", patterns))
+    except ScanFailure:
+        add_all([Violation("[worktree]", 0, "Worktree traversal unavailable; scan incomplete", "scan")])
 
     if include_history:
         try:

@@ -93,7 +93,8 @@ replay protection, and multi-user provisioning require further design/testing.
 
 The scanner now detects private-key markers and GitHub token formats, fails on
 incomplete/missing Git scans, and interleaves Git blob requests/responses to avoid
-pipe deadlock. CI disables bytecode fixtures, pins action commits and engine
+pipe deadlock. Git metadata is pruned before worktree traversal, including
+while background object packing is running. CI disables bytecode fixtures, pins action commits and engine
 archive hashes, and checks examples with the real supported engines. Archival
 live verification tools are opt-in and are not release evidence.
 
@@ -105,7 +106,7 @@ independent revocation across every previously exposed system is not proven here
 
 | Check | Observed result |
 | --- | --- |
-| Standard-library offline regressions | 92 passed |
+| Standard-library offline regressions | 94 passed |
 | Offline policy verifier | 6/6 passed |
 | Actual pinned engine checks | 4 generated profiles + 2 current examples passed |
 | ShellCheck 0.11.0 / Bash syntax | Passed for installer and initializer |
