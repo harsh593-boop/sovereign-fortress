@@ -744,9 +744,14 @@ def get_session_cookie(header_value: str):
         cookies = SimpleCookie()
         cookies.load(header_value)
         morsel = cookies.get("sf_session")
-        return morsel.value if morsel else None
+        if morsel:
+            return morsel.value
     except Exception:
-        return None
+        pass
+    m = re.search(r'(?:^|;\s*)sf_session=([^;]+)', header_value)
+    if m:
+        return m.group(1).strip('"\'')
+    return None
 
 def is_traffic_only_mode(mode: str) -> bool:
     return (str(mode).lower() in {
@@ -1222,7 +1227,7 @@ LOGIN_HTML_TEMPLATE = """<!DOCTYPE html>
         <h1>SOVEREIGN FORTRESS</h1>
         <p style="margin-bottom: 12px;">Authentication Required — use the login form, not credentials in a URL.</p>
         {{ERR_HTML}}
-        <form method="POST" action="/portal/login">
+        <form method="POST" action="/portal">
             <input type="password" name="auth_credential" placeholder="Subscription/admin token (ft_sec_...)" required autofocus autocomplete="off">
             <input type="password" name="totp_code" placeholder="Separate portal second-factor code, if enrolled" autocomplete="one-time-code">
             <button type="submit" class="btn">AUTHENTICATE</button>
@@ -1535,9 +1540,9 @@ class FortressSubHandler(BaseHTTPRequestHandler):
     def enforce_https_upgrade(self):
         is_ssl = isinstance(self.connection, ssl.SSLSocket)
         try:
-            req_host = urllib.parse.urlsplit("https://" + self.headers.get("Host", "")).hostname
-        except ValueError:
-            req_host = None
+            req_host = (urllib.parse.urlsplit("https://" + self.headers.get("Host", "")).hostname or "").lower()
+        except Exception:
+            req_host = ""
         target_host = DOMAIN if (DOMAIN and not DOMAIN.startswith("<")) else SERVER_IP
         if is_ssl and (req_host not in {target_host.lower(), SERVER_IP.lower()}
                        or len(self.headers.get_all("Host", [])) != 1):
@@ -1588,9 +1593,6 @@ class FortressSubHandler(BaseHTTPRequestHandler):
         if self.enforce_https_upgrade():
             return
         client_ip = self.get_client_ip()
-        if is_ip_banned(client_ip):
-            self.send_redirect_to_decoy()
-            return
 
         parsed = urllib.parse.urlparse(self.path)
         path = posixpath.normpath(parsed.path)
@@ -1600,6 +1602,13 @@ class FortressSubHandler(BaseHTTPRequestHandler):
             path = path.rstrip('/')
         query = urllib.parse.parse_qs(parsed.query)
         master_token = get_or_create_token()
+
+        portal_routes = {"", "/portal", "/portal/login", "/portal/qrcode.min.js",
+                         "/favicon.ico", "/favicon.svg", "/portal/legal",
+                         "/portal/terms", "/portal/privacy"}
+        if path not in portal_routes and is_ip_banned(client_ip):
+            self.send_redirect_to_decoy()
+            return
 
         # Offline embedded QR code script
         if path == "/portal/qrcode.min.js":
@@ -1650,7 +1659,7 @@ class FortressSubHandler(BaseHTTPRequestHandler):
             return
 
         # 1. Root / Portal
-        if path == "" or path == "/portal":
+        if path in ["", "/portal", "/portal/login"]:
             # Browser authentication must use POST; GET tokens leak into history.
             if "token" in query:
                 self.send_error(400, "Use the login form, not a token in the URL")
@@ -1847,9 +1856,6 @@ class FortressSubHandler(BaseHTTPRequestHandler):
         if self.enforce_https_upgrade():
             return
         client_ip = self.get_client_ip()
-        if is_ip_banned(client_ip):
-            self.send_redirect_to_decoy()
-            return
 
         parsed = urllib.parse.urlparse(self.path)
         path = posixpath.normpath(parsed.path)
@@ -1857,8 +1863,14 @@ class FortressSubHandler(BaseHTTPRequestHandler):
             path = ""
         else:
             path = path.rstrip('/')
+
+        # Non-login routes check IP ban immediately
+        if path not in ["/portal/login", "/portal"] and is_ip_banned(client_ip):
+            self.send_redirect_to_decoy()
+            return
+
         origin = self.headers.get("Origin")
-        if origin:
+        if origin and path not in ["/portal/login", "/portal"]:
             try:
                 origin_parsed = urllib.parse.urlsplit(origin)
                 origin_host = (origin_parsed.hostname or "").lower()
@@ -1866,7 +1878,7 @@ class FortressSubHandler(BaseHTTPRequestHandler):
                 target_host = (DOMAIN if (DOMAIN and not DOMAIN.startswith("<")) else SERVER_IP).lower()
                 allowed_hosts = {req_host, target_host, SERVER_IP.lower(), "localhost", "127.0.0.1"}
                 allowed_hosts.discard("")
-                if origin_host not in allowed_hosts:
+                if origin_host and origin_host not in allowed_hosts:
                     self.json_response(403, {"success": False, "error": "Origin rejected"})
                     return
             except Exception:
@@ -1890,9 +1902,11 @@ class FortressSubHandler(BaseHTTPRequestHandler):
 
         body_raw = self.rfile.read(content_len).decode("utf-8", errors="ignore")
 
-        if path == "/portal/login":
+        if path in ["/portal/login", "/portal"]:
             params = urllib.parse.parse_qs(body_raw)
-            cred = params.get("auth_credential", [""])[0].strip()
+            cred = params.get("auth_credential", [""])[0].strip().strip("'\"")
+            if cred.lower().startswith("bearer "):
+                cred = cred[7:].strip()
             master_token = get_or_create_token()
             authed = False
 
@@ -1904,13 +1918,16 @@ class FortressSubHandler(BaseHTTPRequestHandler):
                 sess = create_session_cookie()
                 self.send_response(302)
                 self.send_header("Location", "/portal")
-                self.send_header("Set-Cookie", f"sf_session={sess}; Path=/; Secure; HttpOnly; SameSite=Strict")
+                self.send_header("Set-Cookie", f"sf_session={sess}; Path=/; Secure; HttpOnly; SameSite=Lax")
                 self.send_header("Content-Length", "0")
                 self.send_header("Connection", "close")
                 self.end_headers()
                 return
             else:
                 record_failed_attempt(client_ip)
+                if is_ip_banned(client_ip):
+                    self.send_redirect_to_decoy()
+                    return
                 html = render_login_page("Invalid Secret Token or TOTP Code. Attempt recorded.")
                 body = html.encode("utf-8")
                 self.send_response(401)
