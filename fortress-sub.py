@@ -1858,9 +1858,20 @@ class FortressSubHandler(BaseHTTPRequestHandler):
         else:
             path = path.rstrip('/')
         origin = self.headers.get("Origin")
-        if origin and origin != "https://" + self.headers.get("Host", ""):
-            self.json_response(403, {"success": False, "error": "Origin rejected"})
-            return
+        if origin:
+            try:
+                origin_parsed = urllib.parse.urlsplit(origin)
+                origin_host = (origin_parsed.hostname or "").lower()
+                req_host = (urllib.parse.urlsplit("https://" + self.headers.get("Host", "")).hostname or "").lower()
+                target_host = (DOMAIN if (DOMAIN and not DOMAIN.startswith("<")) else SERVER_IP).lower()
+                allowed_hosts = {req_host, target_host, SERVER_IP.lower(), "localhost", "127.0.0.1"}
+                allowed_hosts.discard("")
+                if origin_host not in allowed_hosts:
+                    self.json_response(403, {"success": False, "error": "Origin rejected"})
+                    return
+            except Exception:
+                self.json_response(403, {"success": False, "error": "Origin rejected"})
+                return
         if self.headers.get("Transfer-Encoding") or len(self.headers.get_all("Content-Length", [])) > 1:
             self.send_error(400, "Ambiguous request framing")
             return
