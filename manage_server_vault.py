@@ -185,15 +185,50 @@ def setup_luks(passphrase: str = None, size_gb: int = 4):
     check_root()
     if LUKS_IMAGE.is_file():
         print(f"[*] LUKS image already exists: {LUKS_IMAGE}")
-        if is_luks_active():
-            print(f"[+] LUKS device is already active at {LUKS_DEV}")
-            if not is_mounted(LUKS_MOUNT):
-                LUKS_MOUNT.mkdir(parents=True, exist_ok=True)
-                os.chmod(LUKS_MOUNT, 0o700)
-                subprocess.run(["mount", str(LUKS_DEV), str(LUKS_MOUNT)], check=True)
-            get_status()
-            return
-        open_luks(passphrase)
+        if not is_luks_active():
+            if not passphrase:
+                passphrase = getpass.getpass("[?] Enter Master LUKS Passphrase: ")
+            p = subprocess.Popen(
+                [
+                    "cryptsetup", "open",
+                    "--type", "luks2",
+                    str(LUKS_IMAGE),
+                    LUKS_NAME,
+                    "-"
+                ],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            stdout, stderr = p.communicate(input=passphrase.encode("utf-8"))
+            if p.returncode != 0:
+                raise RuntimeError(f"cryptsetup open failed: {stderr.decode(errors='replace')}")
+
+        # Check if ext4 already exists
+        needs_format = True
+        try:
+            blkid_out = subprocess.check_output(["blkid", str(LUKS_DEV)], stderr=subprocess.DEVNULL).decode()
+            if "ext4" in blkid_out:
+                needs_format = False
+        except Exception:
+            needs_format = True
+
+        if needs_format:
+            print(f"[*] Creating ext4 filesystem on {LUKS_DEV}...")
+            subprocess.run(["mkfs.ext4", "-q", "-L", "fortress_crypt", str(LUKS_DEV)], check=True)
+
+        if not is_mounted(LUKS_MOUNT):
+            LUKS_MOUNT.mkdir(parents=True, exist_ok=True)
+            os.chmod(LUKS_MOUNT, 0o700)
+            print(f"[*] Mounting {LUKS_DEV} at {LUKS_MOUNT}...")
+            subprocess.run(["mount", str(LUKS_DEV), str(LUKS_MOUNT)], check=True)
+
+        (LUKS_MOUNT / "adguard").mkdir(parents=True, exist_ok=True)
+        (LUKS_MOUNT / "backups").mkdir(parents=True, exist_ok=True)
+        (LUKS_MOUNT / "etc").mkdir(parents=True, exist_ok=True)
+        if VAULT_FILE.is_file():
+            shutil.copy2(VAULT_FILE, LUKS_MOUNT / "etc" / "vault.enc")
+        print(f"[+] LUKS2 storage initialized and mounted at {LUKS_MOUNT}.")
         get_status()
         return
 
@@ -241,7 +276,22 @@ def setup_luks(passphrase: str = None, size_gb: int = 4):
         raise RuntimeError(f"cryptsetup luksFormat failed: {stderr.decode(errors='replace')}")
 
     print("[+] LUKS2 container formatted successfully.")
-    open_luks(passphrase)
+    print(f"[*] Opening LUKS2 container {LUKS_IMAGE} -> {LUKS_NAME}...")
+    p_open = subprocess.Popen(
+        [
+            "cryptsetup", "open",
+            "--type", "luks2",
+            str(LUKS_IMAGE),
+            LUKS_NAME,
+            "-"
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
+    )
+    stdout, stderr = p_open.communicate(input=passphrase.encode("utf-8"))
+    if p_open.returncode != 0:
+        raise RuntimeError(f"cryptsetup open failed: {stderr.decode(errors='replace')}")
 
     print(f"[*] Creating ext4 filesystem on {LUKS_DEV}...")
     subprocess.run(["mkfs.ext4", "-q", "-L", "fortress_crypt", str(LUKS_DEV)], check=True)
@@ -290,11 +340,16 @@ def open_luks(passphrase: str = None):
         print(f"[+] LUKS2 device opened at {LUKS_DEV}.")
 
     if not is_mounted(LUKS_MOUNT):
-        LUKS_MOUNT.mkdir(parents=True, exist_ok=True)
-        os.chmod(LUKS_MOUNT, 0o700)
-        print(f"[*] Mounting {LUKS_DEV} at {LUKS_MOUNT}...")
-        subprocess.run(["mount", str(LUKS_DEV), str(LUKS_MOUNT)], check=True)
-        print(f"[+] Mounted at {LUKS_MOUNT}.")
+        try:
+            blkid_out = subprocess.check_output(["blkid", str(LUKS_DEV)], stderr=subprocess.DEVNULL).decode()
+            if "ext4" in blkid_out:
+                LUKS_MOUNT.mkdir(parents=True, exist_ok=True)
+                os.chmod(LUKS_MOUNT, 0o700)
+                print(f"[*] Mounting {LUKS_DEV} at {LUKS_MOUNT}...")
+                subprocess.run(["mount", str(LUKS_DEV), str(LUKS_MOUNT)], check=True)
+                print(f"[+] Mounted at {LUKS_MOUNT}.")
+        except Exception:
+            pass
     return True
 
 
