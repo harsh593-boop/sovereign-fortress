@@ -846,9 +846,8 @@ def get_singbox_json_config(mode="full", core="1.11"):
                     # Connect to AdGuard on the VPS *through* the selected proxy.
                     # Never send plaintext DNS directly to the public endpoint.
                     # The private wg0 address is bound by the server-side resolver.
-                    "address": f"tls://10.8.0.1:853",
-                    "detour": "proxy",
-                    "tls": {"server_name": DOMAIN}
+                    "address": f"udp://10.8.0.1:{DNS_PORT}",
+                    "detour": "proxy"
                 }
             ],
             "strategy": "prefer_ipv4"
@@ -1062,9 +1061,8 @@ def get_singbox_json_config(mode="full", core="1.11"):
     cfg["route"] = {"auto_detect_interface": True, "rules": rules}
     if core == "1.14":
         dns_server = ({"type": "local", "tag": "dns-direct"} if is_traffic_only else
-                      {"type": "tls", "tag": "dns-remote", "server": "10.8.0.1",
-                       "server_port": 853, "detour": "proxy",
-                       "tls": {"server_name": DOMAIN}})
+                      {"type": "udp", "tag": "dns-remote", "server": "10.8.0.1",
+                       "server_port": DNS_PORT, "detour": "proxy"})
         cfg["dns"]["servers"] = [dns_server]
         cfg["inbounds"][0]["dns_mode"] = "disabled" if is_traffic_only else "hijack"
         cfg["outbounds"] = [o for o in cfg["outbounds"] if o["type"] != "block"]
