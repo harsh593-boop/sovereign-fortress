@@ -262,15 +262,21 @@ To enable globally trusted HTTPS certificates via Let's Encrypt (eliminating TLS
 
 ## 💻 Client Applications & Connections
 
-### 1. Universal Hiddify App (Android, Windows, iOS, macOS)
-1. Install **Hiddify** from [GitHub Releases](https://github.com/hiddify/hiddify-app/releases) or Google Play Store.
-2. Click **+ Add Profile** &rarr; **Add from Clipboard** &rarr; paste your subscription URL:
-   ```text
-   https://<YOUR_SERVER_IP>:8443/sub/<YOUR_SUBSCRIPTION_TOKEN>
-   ```
-3. Tap **Connect**!
+### 1. Universal Clients (NekoBox, NekoRay, Sing-box)
+**RECOMMENDED:** Use **NekoBox** (Android/Windows) or the official **Sing-box GUI**.
+These clients natively support raw Sing-box JSON fragments, custom WFP TUN route rules, and do not aggressively overwrite DNS configuration.
 
-*Note on Hiddify UI Nodes & Balancers*:
+> [!WARNING]
+> **Do NOT use Hiddify** if you intend to use the "Traffic-Only" mode. Hiddify's profile importer strips out all custom routing, `process_name` bypass rules, and custom DNS blocks, forcing its own System Proxy and DNS hijacking logic (which leads to WebRTC leaks and NextDNS bypasses).
+
+1. Install **NekoBox** or the official **Sing-box** client.
+2. Add a new profile by pasting your subscription URL (or raw JSON configuration):
+   ```text
+   https://<YOUR_SERVER_IP>:8443/sub/<YOUR_SUBSCRIPTION_TOKEN>?mode=traffic-only
+   ```
+3. Connect and ensure your client is using the **TUN** interface (not System Proxy).
+
+*Note on UI Nodes & Balancers*:
 * **`lowest` Balancer**: Maps directly to the Sing-box dynamic `urltest` group (`auto-fastest`). It benchmarks the configured stealth proxy outbounds; native WireGuard remains a manual choice so blocked UDP does not win automatically.
 * **`balance` Balancer**: Maps to the Sing-box master `proxy` selector group.
 * **Individual Protocol Nodes**: Directly underneath the two balancers, all 6 mobile-compatible stealth protocol nodes (`Fortress-Reality-TCP`, `Fortress-Hysteria2-Salamander`, `Fortress-Hysteria2-Standard`, `Fortress-TUIC5`, `Fortress-Shadowsocks2022`, and `Fortress-WireGuard-Native`) appear with clean labels matching the Web Portal 1:1.
@@ -280,8 +286,8 @@ To enable globally trusted HTTPS certificates via Let's Encrypt (eliminating TLS
 Launch `Launch Sovereign Fortress.bat` (or run `SovereignFortressApp.pyw`):
 * Dark-mode control center with real-time protocol port reachability and status indicators.
 * **`📱 2FA Setup QR`**: Native on-screen 2FA registration popup with live sync verification.
-* **`📲 Mobile Sub QR`**: Scan directly with phone camera to import all 7 protocols into Hiddify.
-* **`⚡ Launch Hiddify`**: 1-Click launcher with clipboard auto-copy.
+* **`📲 Mobile Sub QR`**: Scan directly with phone camera to import the full JSON config.
+* **`⚡ Launch Client`**: 1-Click launcher with clipboard auto-copy.
 * Local DPAPI credential protection (`fortress_vault.py lock`) and emergency overwrite panic switch (`fortress_vault.py shred`).
 
 ### 3. YogaDNS Setup (for Campus Wi-Fi)

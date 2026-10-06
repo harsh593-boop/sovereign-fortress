@@ -44,8 +44,8 @@ def harden_adguard(config):
                ratelimit=100, ratelimit_whitelist=['127.0.0.1', '10.8.0.1'], refuse_any=True,
                cache_size=4194304, cache_ttl_min=0, cache_ttl_max=0, cache_optimistic=False,
                handle_ddr=False, use_private_ptr_resolvers=False, serve_plain_dns=True)
-    c.setdefault('tls', {}).update(enabled=False, port_https=0, port_dns_over_tls=0,
-                                   port_dns_over_quic=0, port_dnscrypt=0, allow_unencrypted_doh=False)
+    c.setdefault('tls', {}).update(enabled=True, port_https=8445, port_dns_over_tls=853,
+                                   port_dns_over_quic=853, port_dnscrypt=0, allow_unencrypted_doh=False)
     c.setdefault('clients', {})['runtime_sources'] = {k: False for k in ('whois', 'arp', 'rdns', 'dhcp', 'hosts')}
     return c
 

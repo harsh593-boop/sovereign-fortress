@@ -86,7 +86,7 @@ TOKEN = CONFIG.get("token", "<YOUR_SUBSCRIPTION_TOKEN>")
 SUB_URL_HTTPS = f"https://{uri_host(SUB_HOST)}:{SUB_PORT}/sub/{quote(TOKEN, safe='')}"
 SUB_URL = SUB_URL_HTTPS
 SUB_URL_TRAFFIC_ONLY = f"{SUB_URL_HTTPS}?mode=traffic-only"
-HIDDIFY_DEEPLINK = f"hiddify://import/{quote(SUB_URL, safe='')}#SovereignFortress"
+NEKOBOX_DEEPLINK = f"nekobox://import/{quote(SUB_URL, safe='')}#SovereignFortress"
 PORTAL_URL = f"https://{uri_host(SUB_HOST)}:{SUB_PORT}/portal"
 
 UUID = CONFIG.get("uuid", "<YOUR_UUID>")
@@ -234,9 +234,9 @@ class SovereignApp(tk.Tk):
         act_frame = tk.Frame(self, bg="#111827", padx=14, pady=10, highlightthickness=1, highlightbackground="#1f2937")
         act_frame.pack(fill="x", padx=16, pady=(0, 10))
 
-        btn_launch = tk.Button(act_frame, text="⚡ Launch Hiddify", bg="#2563eb", fg="#ffffff", activebackground="#1d4ed8",
+        btn_launch = tk.Button(act_frame, text="⚡ Launch NekoBox", bg="#2563eb", fg="#ffffff", activebackground="#1d4ed8",
                                activeforeground="#ffffff", font=("Segoe UI", 9, "bold"), relief="flat", padx=10, pady=6, cursor="hand2",
-                               command=self.open_hiddify)
+                               command=self.open_nekobox)
         btn_launch.pack(side="left", padx=3)
 
         btn_copy_proxies = tk.Button(act_frame, text="📋 Copy Proxies", bg="#1f2937", fg="#38bdf8", activebackground="#374151",
@@ -397,32 +397,33 @@ class SovereignApp(tk.Tk):
                     time.sleep(0.2)
         return None
 
-    def open_hiddify(self):
+    def open_nekobox(self):
         self.clipboard_clear()
         self.clipboard_append(SUB_URL)
         launched = False
         try:
-            os.startfile(HIDDIFY_DEEPLINK)
+            os.startfile(NEKOBOX_DEEPLINK)
             launched = True
         except Exception:
             pass
 
         if not launched:
             prog_files = os.environ.get("ProgramFiles", r"C:\Program Files")
-            hiddify_exe = os.path.join(prog_files, "Hiddify", "Hiddify.exe")
-            if os.path.exists(hiddify_exe):
-                subprocess.Popen([hiddify_exe])
+            nekobox_exe = os.path.join(prog_files, "NekoBox", "nekobox.exe")
+            if os.path.exists(nekobox_exe):
+                subprocess.Popen([nekobox_exe])
                 launched = True
             else:
-                webbrowser.open(HIDDIFY_DEEPLINK)
+                webbrowser.open(NEKOBOX_DEEPLINK)
 
         messagebox.showinfo(
-            "Hiddify 1-Click Import",
+            "Client 1-Click Import",
             "Versioned subscription link is copied to your clipboard!\n\n"
-            "How to load into Hiddify:\n"
-            "1. In Hiddify, click the '+' button in the top right.\n"
-            "2. Click 'Add from Clipboard' (or press Ctrl+V).\n\n"
-            "The profile will be imported. Confirm Hiddify is using TUN/Service Mode; system-proxy mode cannot protect UDP/WebRTC."
+            "How to load into NekoBox / Sing-box:\n"
+            "1. Open NekoBox / Sing-box GUI.\n"
+            "2. Click 'Add Profile from Clipboard' or paste the URL in the Profiles section.\n"
+            "3. Update the subscription and start the TUN connection.\n\n"
+            "Note: NekoBox is strongly recommended over Hiddify to preserve Traffic-Only rules."
         )
 
     def show_2fa_qr(self):
