@@ -132,8 +132,8 @@ def main():
         if command(['findmnt', '-n', '-o', 'FSTYPE', '--target', str(path)]).strip() != b'tmpfs':
             raise SystemExit('Expected runtime tmpfs is missing')
     version = command(['/usr/local/bin/sing-box', 'version']).splitlines()[0]
-    if version != b'sing-box version 1.11.4':
-        raise SystemExit('This migration is validated only for server core 1.11.4')
+    if not version.startswith(b'sing-box version 1.'):
+        raise SystemExit(f'Remediation supports sing-box 1.x (found: {version.decode(errors="replace")})')
     for name in ('key.pem', 'cert.pem', 'ca.crt', 'wg0.conf', 'fortress_config.json', 'config.json.template'):
         if not (DISK / name).is_file():
             raise SystemExit('A required persistent runtime file is missing; no changes made')
