@@ -209,8 +209,8 @@ def main():
     if not version.startswith(b'sing-box version 1.'):
         raise SystemExit(f'Remediation supports sing-box 1.x (found: {version.decode(errors="replace")})')
     for name in ('key.pem', 'cert.pem', 'ca.crt', 'wg0.conf', 'fortress_config.json', 'config.json.template'):
-        if not (DISK / name).is_file():
-            raise SystemExit('A required persistent runtime file is missing; no changes made')
+        if not (DISK / name).is_file() and not (RAM / name).is_file() and not (RAM / 'wireguard' / name).is_file():
+            raise SystemExit(f'A required runtime file ({name}) is missing on both disk and RAM; no changes made')
     subscription = Path(args.subscription_script).read_bytes()
     initializer = Path(args.initializer_script).read_bytes()
     compile(subscription, 'reviewed-subscription', 'exec')
@@ -283,16 +283,18 @@ def main():
         # This AdGuard release rewrites config on startup: only RAM is writable.
         atomic_file(work / 'AdGuardHome.yaml', yaml.safe_dump(agh, sort_keys=False),
                     mode=0o600, uid=user.pw_uid, gid=user.pw_gid)
-        atomic_file(DISK / 'config.json.template', json.dumps(core, indent=2), gid=user.pw_gid)
+        if (DISK / 'config.json.template').exists():
+            atomic_file(DISK / 'config.json.template', json.dumps(core, indent=2), gid=user.pw_gid)
         atomic_file(RAM / 'config.json', json.dumps(core, indent=2), gid=user.pw_gid)
         # Retire SSH-seed distribution, without touching the SSH PAM account file.
         for path, mode in ((DISK / 'fortress_config.json', 0o600), (RAM / 'fortress_config.json', 0o640)):
-            master = json.loads(path.read_text())
-            master.pop('totp_secret', None)
-            master.setdefault('portal_totp_required', False)
-            if args.domain:
-                master['domain'] = args.domain
-            atomic_file(path, json.dumps(master, indent=2), mode=mode, gid=user.pw_gid)
+            if path.exists():
+                master = json.loads(path.read_text())
+                master.pop('totp_secret', None)
+                master.setdefault('portal_totp_required', False)
+                if args.domain:
+                    master['domain'] = args.domain
+                atomic_file(path, json.dumps(master, indent=2), mode=mode, gid=user.pw_gid)
         atomic_file('/usr/local/bin/fortress-sub.py', subscription, mode=0o755)
         atomic_file('/usr/local/bin/fortress-init.sh', initializer, mode=0o755)
         for name, data in dropins().items():

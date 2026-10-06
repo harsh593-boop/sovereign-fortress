@@ -30,16 +30,28 @@ if [ -f "$DISK_DIR/dnscrypt.yaml" ]; then
     install -m 0600 -o "$FORTRESS_USER" -g "$FORTRESS_USER" \
         "$DISK_DIR/dnscrypt.yaml" "$RAM_DIR/adguard/dnscrypt.yaml"
 fi
+if [ -f "$DISK_DIR/vault.enc" ] && [ ! -f "$RAM_DIR/key.pem" ]; then
+    echo '[!] Vault is locked on disk (/etc/fortress/vault.enc).' >&2
+    echo '[!] Run "sudo python3 manage_server_vault.py unlock" to unlock keys into volatile RAM.' >&2
+fi
 for file in key.pem cert.pem ca.crt fortress_config.json; do
-    install -m 0640 -o root -g "$FORTRESS_USER" "$DISK_DIR/$file" "$RAM_DIR/$file"
+    if [ -f "$DISK_DIR/$file" ]; then
+        install -m 0640 -o root -g "$FORTRESS_USER" "$DISK_DIR/$file" "$RAM_DIR/$file"
+    fi
 done
-install -m 0640 -o root -g "$FORTRESS_USER" "$DISK_DIR/config.json.template" "$RAM_DIR/config.json"
-install -m 0600 -o root -g root "$DISK_DIR/wg0.conf" "$RAM_DIR/wireguard/wg0.conf"
-if [ ! -f "$STATE_DIR/sub_token" ]; then
+if [ -f "$DISK_DIR/config.json.template" ]; then
+    install -m 0640 -o root -g "$FORTRESS_USER" "$DISK_DIR/config.json.template" "$RAM_DIR/config.json"
+fi
+if [ -f "$DISK_DIR/wg0.conf" ]; then
+    install -m 0600 -o root -g root "$DISK_DIR/wg0.conf" "$RAM_DIR/wireguard/wg0.conf"
+fi
+if [ ! -f "$STATE_DIR/sub_token" ] && [ -f "$DISK_DIR/sub_token" ]; then
     # Migrate legacy durable token state once. Never overwrite a newer rotation.
     install -m 0600 -o "$FORTRESS_USER" -g "$FORTRESS_USER" "$DISK_DIR/sub_token" "$STATE_DIR/sub_token"
 fi
-install -m 0640 -o root -g "$FORTRESS_USER" "$STATE_DIR/sub_token" "$RAM_DIR/sub_token"
+if [ -f "$STATE_DIR/sub_token" ]; then
+    install -m 0640 -o root -g "$FORTRESS_USER" "$STATE_DIR/sub_token" "$RAM_DIR/sub_token"
+fi
 # Optional portal TOTP lives in the dedicated state directory. SSH PAM seeds
 # are not copied into VPN runtime or distributed to clients.
 install -d -m 0700 /etc/wireguard

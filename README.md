@@ -331,7 +331,17 @@ The example deployment separates some runtime state from persistent configuratio
 * **Windows DPAPI:** `fortress_vault.py` protects explicitly selected private client files under the current user. The PowerShell wrappers delegate to that implementation. Hiddify caches, application databases, clipboard contents, memory, swap, and backups are not automatically protected by this vault.
 * **Machine & User Session Entropy**: Vault ciphertexts are cryptographically bound using secondary entropy derived from user identity, computer name, and static salt. Offline drive cloning, cold disk extraction, or rogue processes in other user sessions cannot decrypt the credentials without access to the authenticated user's Windows session. (Note: As standard with user-scoped DPAPI, processes executing within the active user logon session can unprotect vault data; it is not hardware PCR-sealed to a TPM).
 
-### 4. Local cleanup helper (`Shred-Fortress.ps1`)
+### 4. Server-Side Zero-Disk-Footprint Vault (`manage_server_vault.py`)
+* **AES-256-GCM Authenticated Storage:** Operators can lock all server private keys (`key.pem`, `ca.key`, `wg0.conf`, `dnscrypt.yaml`, `fortress_config.json`) into `/etc/fortress/vault.enc` using PBKDF2 with 100,000 iterations.
+* **Volatile RAM-Only Runtime:** Plaintext keys are shredded from physical disk storage using `shred -u -z` and exist solely within the `/run/fortress` volatile `tmpfs` RAM disk.
+* **Cold-Start Anti-Forensic Defense:** If the VPS is powered down or snapshotted, an adversary cannot extract private keys from the disk image without the master passphrase.
+* **Commands:**
+  * `sudo python3 manage_server_vault.py status` — Check current memory and vault state.
+  * `sudo python3 manage_server_vault.py lock` — Encrypt keys into `vault.enc` and shred plaintext from disk.
+  * `sudo python3 manage_server_vault.py unlock` — Decrypt `vault.enc` into volatile RAM and restart services.
+  * `sudo python3 manage_server_vault.py purge-ram` — Emergency memory wipe and daemon termination.
+
+### 5. Local cleanup helper (`Shred-Fortress.ps1`)
 * The helper attempts to remove selected local files. SSD wear-leveling, snapshots, backups, and filesystem semantics mean it cannot guarantee forensic erasure.
 
 ---
