@@ -1,8 +1,8 @@
-# AdGuard Home v0.107.79 schema. Plain DNS is disabled; private DoT/DoQ/DoH
-# use the operator's certificate and are reachable only through the VPN address.
+# AdGuard Home configuration. Serves low-latency 0-RTT DNS on 5335 (UDP/TCP),
+# private DNSCrypt on 5443, private DoT/DoQ on 853, and private DoH on 8445.
 schema_version: 29
 http:
-  address: 10.8.0.1:3000
+  address: 127.0.0.1:3000
   pprof:
     enabled: false
     port: 6060
@@ -23,32 +23,32 @@ log:
   verbose: false
 dns:
   bind_hosts:
-    - 127.0.0.1
-    - 10.8.0.1
+    - 0.0.0.0
   port: 5335
   anonymize_client_ip: true
   ratelimit: 100
   ratelimit_whitelist:
     - 127.0.0.1
     - 10.8.0.1
-  allowed_clients:
-    - 127.0.0.0/8
-    - 10.8.0.0/24
+  allowed_clients: []
   refuse_any: true
   upstream_dns:
-    - tls://dns.quad9.net
     - https://dns.quad9.net/dns-query
+    - tls://dns.quad9.net
+    - https://cloudflare-dns.com/dns-query
+    - quic://dns.adguard-dns.com
   bootstrap_dns:
     - 9.9.9.9
-  upstream_mode: load_balance
+    - 1.1.1.1
+  upstream_mode: parallel
   upstream_timeout: 10s
   cache_size: 4194304
-  cache_ttl_min: 0
-  cache_ttl_max: 0
-  cache_optimistic: false
+  cache_ttl_min: 300
+  cache_ttl_max: 86400
+  cache_optimistic: true
   use_private_ptr_resolvers: false
   handle_ddr: false
-  serve_plain_dns: false
+  serve_plain_dns: true
   edns_client_subnet:
     enabled: false
     use_custom: false
@@ -57,11 +57,12 @@ dns:
 tls:
   enabled: true
   server_name: <YOUR_TLS_SERVER_NAME>
-  force_https: true
+  force_https: false
   port_https: 8445
   port_dns_over_tls: 853
   port_dns_over_quic: 853
-  port_dnscrypt: 0
+  port_dnscrypt: 5443
+  dnscrypt_config_file: /run/fortress/adguard/dnscrypt.yaml
   allow_unencrypted_doh: false
   certificate_path: /run/fortress/cert.pem
   private_key_path: /run/fortress/key.pem

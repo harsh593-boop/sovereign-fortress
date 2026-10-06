@@ -38,9 +38,11 @@ import is not proof that either operating mode was preserved.
 
 Full-Tunnel and Traffic-Only both use TUN in the reference profiles. Traffic-Only
 means intended local DNS egress alongside tunneled payload traffic, **not**
-system-proxy-only mode. Full-Tunnel now uses private DoT to AdGuard; incoming
-plain DNS is disabled. Private DoH/DoQ are available on the WireGuard address;
-DNSCrypt is not enabled until a verified provider configuration is provisioned. Arbitrary DoH cannot be identified universally.
+system-proxy-only mode. Full-Tunnel routes DNS to AdGuard Home on the VPS (`10.8.0.1:5335` plain UDP DNS)
+encapsulated inside the encrypted proxy tunnel (`detour: proxy`), delivering instant 0-RTT speed
+without double-TLS overhead. AdGuard Home also provides a dedicated **DNSCrypt v2** resolver on port `5443`
+(Curve25519 & Ed25519 authenticated), with 1-click DNS stamps (`sdns://...`) exportable in the portal for YogaDNS,
+Simple DNSCrypt, and dnscrypt-proxy. AdGuard caching is tuned with optimistic prefetching and parallel upstreams.
 
 Private Windows client files belong under `%LOCALAPPDATA%\\SovereignFortress`,
 not the public checkout. The GUI can load a user-bound DPAPI `.enc` config

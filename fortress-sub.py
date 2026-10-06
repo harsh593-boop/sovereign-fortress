@@ -87,6 +87,7 @@ SERVER_IP = CONFIG.get("server_ip", "127.0.0.1")
 DOMAIN = CONFIG.get("domain", "")
 PORT = int(CONFIG.get("sub_port", 8443))
 DNS_PORT = int(CONFIG.get("dns_port", 5335))
+DNSCRYPT_PORT = int(CONFIG.get("dnscrypt_port", 5443))
 PORTAL_TOTP_REQUIRED = CONFIG.get("portal_totp_required", False) is True
 
 # The endpoint is an operator configuration value, not a certificate CN.
@@ -353,7 +354,7 @@ DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
             <p>Never display or copy SSH enrollment secrets into this dashboard. Rotate the previously exposed TOTP seed and enroll it directly on the server.</p>
         </div>
 
-        <h3 style="font-size: 16px; color: #fff; margin-bottom: 12px;">⚡ Direct Protocol Links (7 Protocols + Auto-Fastest Balancer)</h3>
+        <h3 style="font-size: 16px; color: #fff; margin-bottom: 12px;">⚡ Direct Protocol &amp; DNS Links (7 Proxies + DNSCrypt v2 + Auto-Fastest Balancer)</h3>
 <div class="grid">
     <div class="proto-card">
         <div>
@@ -410,6 +411,16 @@ DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
             <div class="proto-desc">Transport: TCP · TLS 1.3 WebSockets (wstunnel) · Wraps WireGuard inside HTTPS WebSockets. Requires local wstunnel binary (start-wstunnel.bat); not included in standard mobile JSON profile.</div>
         </div>
         <button class="btn btn-sec" onclick="copyText('{{WG_TCP}}', 'WireGuard over TCP Link copied!')">Copy Link</button>
+    </div>
+    <div class="proto-card">
+        <div>
+            <div class="proto-title">🛡️ Fortress-DNSCrypt (Port {{DNSCRYPT_PORT}})</div>
+            <div class="proto-desc">Transport: UDP/TCP · DNSCrypt v2 (X25519 &amp; Ed25519) · Zero-RTT caching, optimistic prefetch, and ad/malware blocking. Import stamp into YogaDNS, Simple DNSCrypt, or dnscrypt-proxy.</div>
+        </div>
+        <div style="display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
+            <button class="btn btn-primary" onclick="copyText('{{DNSCRYPT_STAMP}}', 'WAN DNSCrypt Stamp copied!')">Copy Stamp (WAN / DuckDNS)</button>
+            <button class="btn btn-sec" onclick="copyText('{{DNSCRYPT_STAMP_VPN}}', 'VPN DNSCrypt Stamp copied!')">Copy Stamp (VPN 10.8.0.1)</button>
+        </div>
     </div>
 </div>
         <footer style="margin-top: 40px; padding: 24px 0 12px 0; border-top: 1px solid #1e293b; text-align: center; font-size: 11px; color: #64748b; line-height: 1.8;">
@@ -783,6 +794,55 @@ def get_protocol_links():
     wg_native = f"wg://{server_host}:51820?publickey={urllib.parse.quote(WG_SERVER_PUB)}&privkey={urllib.parse.quote(WG_CLIENT_PRIV)}&address={WG_CLIENT_IP}%2F32&dns=10.8.0.1#Fortress-WireGuard-Native"
     wg_tcp = f"wstunnel://{server_host}:{WSTUNNEL_PORT}?sni={domain_target}&prefix=&tunnel=127.0.0.1:51820#Fortress-WireGuard-TCP"
     return [vless, hy2_sal, hy2_std, tuic, ss, wg_native, wg_tcp]
+
+
+def make_dnscrypt_stamp(addr, public_key_hex, provider_name, props=0x07):
+    proto = 0x01
+    addr_bytes = addr.encode("ascii")
+    pk_bytes = bytes.fromhex(public_key_hex)
+    prov_bytes = provider_name.encode("ascii")
+    payload = (
+        bytes([proto]) +
+        struct.pack("<Q", props) +
+        bytes([len(addr_bytes)]) + addr_bytes +
+        bytes([len(pk_bytes)]) + pk_bytes +
+        bytes([len(prov_bytes)]) + prov_bytes
+    )
+    b64 = base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
+    return f"sdns://{b64}"
+
+
+def get_dnscrypt_info():
+    paths = [
+        os.path.join(RAM_DIR, "adguard", "dnscrypt.yaml"),
+        os.path.join(DISK_DIR, "dnscrypt.yaml"),
+        os.path.join(os.path.dirname(__file__), "dnscrypt.yaml"),
+    ]
+    for p in paths:
+        if os.path.isfile(p):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    content = f.read()
+                prov = re.search(r"^provider_name:\s*(.+)$", content, re.M)
+                pub = re.search(r"^public_key:\s*([0-9a-fA-F]+)", content, re.M)
+                if prov and pub:
+                    return prov.group(1).strip(), pub.group(1).strip()
+            except Exception:
+                pass
+    return None, None
+
+
+def get_dnscrypt_stamps():
+    prov, pub = get_dnscrypt_info()
+    domain_target = DOMAIN if (DOMAIN and not DOMAIN.startswith("<")) else SERVER_IP
+    if not prov:
+        prov = f"2.dnscrypt-cert.{domain_target}"
+    if not pub:
+        return "", ""
+    stamp_wan = make_dnscrypt_stamp(f"{domain_target}:{DNSCRYPT_PORT}", pub, prov)
+    stamp_vpn = make_dnscrypt_stamp(f"10.8.0.1:{DNSCRYPT_PORT}", pub, prov)
+    return stamp_wan, stamp_vpn
+
 
 def get_singbox_json_config(mode="full", core="1.11"):
     """
@@ -1357,10 +1417,12 @@ def render_dashboard_page(token, totp_secret, session=""):
     nekobox_full = build_nekobox_link(sub_full_url, "Sovereign-Fortress-(Full-Tunnel)")
     nekobox_traffic = build_nekobox_link(sub_traffic_url, "Sovereign-Fortress-(Traffic-Only)")
     vless, hy2_sal, hy2_std, tuic, ss, wg_native, wg_tcp = get_protocol_links()
+    dnscrypt_stamp_wan, dnscrypt_stamp_vpn = get_dnscrypt_stamps()
 
     html = DASHBOARD_HTML_TEMPLATE
     html = html.replace("{{SERVER_IP}}", SERVER_IP)
     html = html.replace("{{DNS_PORT}}", str(DNS_PORT))
+    html = html.replace("{{DNSCRYPT_PORT}}", str(DNSCRYPT_PORT))
     html = html.replace("{{CAMPUS_DOMAIN}}", CAMPUS_DOMAIN)
     html = html.replace("{{SUB_FULL_URL}}", sub_full_url)
     html = html.replace("{{SUB_TRAFFIC_URL}}", sub_traffic_url)
@@ -1380,6 +1442,8 @@ def render_dashboard_page(token, totp_secret, session=""):
     html = html.replace("{{SS}}", ss)
     html = html.replace("{{WG_NATIVE}}", wg_native)
     html = html.replace("{{WG_TCP}}", wg_tcp)
+    html = html.replace("{{DNSCRYPT_STAMP}}", dnscrypt_stamp_wan)
+    html = html.replace("{{DNSCRYPT_STAMP_VPN}}", dnscrypt_stamp_vpn)
     html = html.replace("{{CSRF_TOKEN}}", session_csrf_token(session))
     return html
 
@@ -1595,8 +1659,32 @@ class FortressSubHandler(BaseHTTPRequestHandler):
             if sub_format in ["traffic-only", "split", "direct-dns", "yogadns"]:
                 mode = "traffic-only"
                 fmt = None
-            if len(sub_parts) > 2 or fmt not in (None, "b64", "links", "wg", "wireguard", "wg-tcp", "wireguard-tcp"):
+            if len(sub_parts) > 2 or fmt not in (None, "b64", "links", "wg", "wireguard", "wg-tcp", "wireguard-tcp", "dnscrypt"):
                 self.json_response(400, {"success": False, "error": "Unsupported subscription format"})
+                return
+
+            if fmt == "dnscrypt":
+                stamp_wan, stamp_vpn = get_dnscrypt_stamps()
+                lines = [
+                    f"# Sovereign Fortress DNSCrypt (Port {DNSCRYPT_PORT})",
+                    f"# WAN / DuckDNS Stamp:",
+                    stamp_wan,
+                    f"",
+                    f"# VPN Stamp (10.8.0.1):",
+                    stamp_vpn,
+                    ""
+                ]
+                body = "\n".join(lines).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+                self.send_header("Pragma", "no-cache")
+                self.send_header("Expires", "0")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Connection", "close")
+                self.end_headers()
+                if not head_only:
+                    self.wfile.write(body)
                 return
 
             if fmt == "b64":

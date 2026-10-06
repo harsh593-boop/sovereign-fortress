@@ -26,6 +26,10 @@ install -d -m 0700 -o root -g root "$RAM_DIR/wireguard"
 # AdGuard rewrites its config at startup; restore a reviewed RAM copy each boot.
 install -m 0600 -o "$FORTRESS_USER" -g "$FORTRESS_USER" \
     /opt/AdGuardHome/AdGuardHome.yaml "$RAM_DIR/adguard/AdGuardHome.yaml"
+if [ -f "$DISK_DIR/dnscrypt.yaml" ]; then
+    install -m 0600 -o "$FORTRESS_USER" -g "$FORTRESS_USER" \
+        "$DISK_DIR/dnscrypt.yaml" "$RAM_DIR/adguard/dnscrypt.yaml"
+fi
 for file in key.pem cert.pem ca.crt fortress_config.json; do
     install -m 0640 -o root -g "$FORTRESS_USER" "$DISK_DIR/$file" "$RAM_DIR/$file"
 done

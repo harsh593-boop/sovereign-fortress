@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path
 import pwd
+import re
 import shutil
 import subprocess
 import tempfile
@@ -26,6 +27,50 @@ AGH = Path('/opt/AdGuardHome/AdGuardHome.yaml')
 UNITS = ('adguard-home', 'fortress-core', 'fortress-sub', 'fortress-wstunnel')
 
 
+def ensure_dnscrypt_config(user_uid, user_gid):
+    persistent = DISK / 'dnscrypt.yaml'
+    runtime = RAM / 'adguard' / 'dnscrypt.yaml'
+    if not persistent.exists():
+        domain = ""
+        cfg_path = DISK / 'fortress_config.json'
+        if cfg_path.exists():
+            try:
+                cfg = json.loads(cfg_path.read_text())
+                d = cfg.get('domain', '')
+                if d and not d.startswith('<'):
+                    domain = d.strip()
+                elif cfg.get('server_ip'):
+                    domain = cfg.get('server_ip').strip()
+            except Exception:
+                pass
+        provider_name = f"2.dnscrypt-cert.{domain}" if domain else "2.dnscrypt-cert.fortress"
+
+        def gen_keys(alg):
+            out = subprocess.check_output(['openssl', 'genpkey', '-algorithm', alg, '-text']).decode()
+            m_priv = re.search(r'priv:\s*([0-9a-f:\s]+?)\s*pub:', out, re.I)
+            priv_hex = re.sub(r'[^0-9a-fA-F]', '', m_priv.group(1)).upper()
+            m_pub = re.search(r'pub:\s*([0-9a-f:\s]+)', out, re.I)
+            pub_hex = re.sub(r'[^0-9a-fA-F]', '', m_pub.group(1))[:64].upper()
+            return priv_hex, pub_hex
+
+        priv_ed, pub_ed = gen_keys('ed25519')
+        priv_x, pub_x = gen_keys('x25519')
+
+        content = (
+            f"provider_name: {provider_name}\n"
+            f"public_key: {pub_ed}\n"
+            f"private_key: {priv_ed}{pub_ed}\n"
+            f"resolver_secret: {priv_x}\n"
+            f"resolver_public: {pub_x}\n"
+            f"es_version: 1\n"
+            f"certificate_ttl: 0s\n"
+        )
+        atomic_file(persistent, content, mode=0o600, uid=0, gid=user_gid)
+
+    runtime.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    atomic_file(runtime, persistent.read_bytes(), mode=0o600, uid=user_uid, gid=user_gid)
+
+
 def harden_adguard(config):
     c = copy.deepcopy(config)
     c.setdefault('http', {})['address'] = '127.0.0.1:3000'
@@ -36,16 +81,23 @@ def harden_adguard(config):
     dns = c.setdefault('dns', {})
     for key in ('querylog_enabled', 'querylog_file_enabled', 'querylog_interval', 'querylog_size_memory', 'statistics_interval'):
         dns.pop(key, None)
-    upstreams = dns.get('upstream_dns', [])
-    if not upstreams or any(not str(u).startswith(('tls://', 'https://', 'quic://', 'h3://')) for u in upstreams):
-        raise ValueError('Encrypted DNS upstream policy requires operator review')
-    dns.update(bind_hosts=['127.0.0.1', '10.8.0.1'], port=5335,
-               allowed_clients=['127.0.0.0/8', '10.8.0.0/24'], anonymize_client_ip=True,
+    dns['upstream_dns'] = [
+        'https://dns.quad9.net/dns-query',
+        'tls://dns.quad9.net',
+        'https://cloudflare-dns.com/dns-query',
+        'quic://dns.adguard-dns.com'
+    ]
+    dns['bootstrap_dns'] = ['9.9.9.9', '1.1.1.1']
+    dns['upstream_mode'] = 'parallel'
+    dns.update(bind_hosts=['0.0.0.0'], port=5335,
+               allowed_clients=[], anonymize_client_ip=True,
                ratelimit=100, ratelimit_whitelist=['127.0.0.1', '10.8.0.1'], refuse_any=True,
-               cache_size=4194304, cache_ttl_min=0, cache_ttl_max=0, cache_optimistic=False,
+               cache_size=4194304, cache_ttl_min=300, cache_ttl_max=86400, cache_optimistic=True,
                handle_ddr=False, use_private_ptr_resolvers=False, serve_plain_dns=True)
     c.setdefault('tls', {}).update(enabled=True, port_https=8445, port_dns_over_tls=853,
-                                   port_dns_over_quic=853, port_dnscrypt=0, allow_unencrypted_doh=False)
+                                   port_dns_over_quic=853, port_dnscrypt=5443,
+                                   dnscrypt_config_file='/run/fortress/adguard/dnscrypt.yaml',
+                                   allow_unencrypted_doh=False)
     c.setdefault('clients', {})['runtime_sources'] = {k: False for k in ('whois', 'arp', 'rdns', 'dhcp', 'hosts')}
     return c
 
@@ -107,7 +159,11 @@ def firewall_rules(uid):
     # These additive rules do not alter SSH accepts, default policies, or OCI
     # root-owned storage/DHCP traffic. Existing rules are preserved.
     return [
-        ('INPUT', ['-i', 'wg0', '-d', '10.8.0.1', '-p', proto, '--dport', '5335', '-j', 'ACCEPT'])
+        ('INPUT', ['-i', 'wg0', '-d', '10.8.0.1', '-p', proto, '--dport', port, '-j', 'ACCEPT'])
+        for proto in ('tcp', 'udp')
+        for port in ('5335', '5443')
+    ] + [
+        ('INPUT', ['-p', proto, '--dport', '5443', '-j', 'ACCEPT'])
         for proto in ('tcp', 'udp')
     ] + [('OUTPUT', ['-m', 'owner', '--uid-owner', str(uid), '-d', '169.254.0.0/16', '-j', 'REJECT']),
          ('FORWARD', ['-i', 'wg0', '-d', '169.254.0.0/16', '-j', 'REJECT'])]
@@ -156,13 +212,15 @@ def main():
     os.chmod(backup, 0o700)
     targets = [AGH, RAM / 'adguard' / 'AdGuardHome.yaml', RAM / 'config.json', DISK / 'config.json.template',
                DISK / 'fortress_config.json', RAM / 'fortress_config.json',
+               DISK / 'dnscrypt.yaml', RAM / 'adguard' / 'dnscrypt.yaml',
                Path('/usr/local/bin/fortress-sub.py'), Path('/usr/local/bin/fortress-init.sh'),
                Path('/etc/iptables/rules.v4')]
     for name in dropins():
         targets.append(Path('/etc/systemd/system') / (name + '.service.d') / '90-fortress-reviewed.conf')
     permission_targets = [DISK, RAM, DISK / 'key.pem', DISK / 'ca.key', DISK / 'wg0.conf',
-                          DISK / 'fortress_config.json', DISK / 'totp_secret', RAM / 'key.pem',
-                          RAM / 'fortress_config.json', RAM / 'totp_secret',
+                          DISK / 'fortress_config.json', DISK / 'totp_secret', DISK / 'dnscrypt.yaml',
+                          RAM / 'key.pem', RAM / 'fortress_config.json', RAM / 'totp_secret',
+                          RAM / 'adguard' / 'dnscrypt.yaml',
                           Path('/opt/AdGuardHome/AdGuardHome'), Path('/usr/local/bin/sing-box'),
                           Path('/usr/local/bin/wstunnel')]
     permissions = []
@@ -201,6 +259,7 @@ def main():
         os.chmod(work, 0o700)
         # Stop before writing: AGH writes its configuration during shutdown.
         command(['systemctl', 'stop', 'adguard-home'])
+        ensure_dnscrypt_config(user.pw_uid, user.pw_gid)
         subprocess.run(['chattr', '-i', str(AGH)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         atomic_file(AGH, yaml.safe_dump(agh, sort_keys=False), gid=user.pw_gid)
         # This AdGuard release rewrites config on startup: only RAM is writable.
@@ -247,7 +306,7 @@ def main():
         # Apply root-only ownership after services are successfully healthy.
         os.chown(DISK, 0, user.pw_gid)
         os.chmod(DISK, 0o750)
-        for name in ('key.pem', 'ca.key', 'wg0.conf', 'fortress_config.json', 'config.json.template', 'totp_secret'):
+        for name in ('key.pem', 'ca.key', 'wg0.conf', 'fortress_config.json', 'config.json.template', 'totp_secret', 'dnscrypt.yaml'):
             p = DISK / name
             if p.exists():
                 os.chown(p, 0, user.pw_gid)

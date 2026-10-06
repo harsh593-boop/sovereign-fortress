@@ -8,44 +8,30 @@ operate.
 
 ## Full-Tunnel mode
 
-Full-Tunnel mode is the mode that can provide a coherent fail-closed traffic
-model while the client is running:
+Full-Tunnel mode provides a coherent fail-closed traffic model while the client is running:
 
 ```text
 Applications -> Sing-box TUN -> selected proxy -> VPS
-DNS hijack   -> private DoT 10.8.0.1:853 through the selected proxy -> AdGuard Home
+DNS hijack   -> private DNS 10.8.0.1:5335 (UDP) encapsulated inside selected proxy -> AdGuard Home
 ```
 
 DoH/DoT configured inside applications may still use their own provider through
-the tunnel. Full-Tunnel does not magically force encrypted application DNS
-through AdGuard or make DNS-based ad blocking universal.
+the tunnel. Full-Tunnel routes system DNS requests into AdGuard Home on the VPS.
 
-The client profile must not use `127.0.0.1:5335` for the VPS resolver. On
-Windows, `127.0.0.1` means the Windows client itself. The reference profile
-uses a typed TLS server (`server: 10.8.0.1`, `server_port: 853`, TLS server name
-set to the DuckDNS certificate name) with `detour: proxy` in 1.14. Full legacy
-1.11 mode is retired rather than falling back to plaintext DNS. The address is private to the
-server's WireGuard interface and is reached after the proxy connection
-terminates on the VPS.
+Inside the encrypted tunnel, DNS queries are routed directly to `10.8.0.1:5335` (plain UDP DNS)
+via `detour: proxy`. Because the entire payload is already encapsulated inside the encrypted
+WireGuard, VLESS (Reality), Hysteria 2, or Shadowsocks tunnel, plain UDP DNS provides instant 0-RTT
+resolution without double-encryption overhead. Outside the tunnel, port 5335 is strictly blocked
+by host iptables firewall rules.
 
-For this mode:
+AdGuard Home also runs a dedicated **DNSCrypt v2** server on port `5443` (UDP/TCP) using Curve25519
+and Ed25519 authentication, which can be connected to directly using DNS stamps (`sdns://...`)
+via YogaDNS, Simple DNSCrypt, or dnscrypt-proxy.
 
-1. Disable YogaDNS while testing.
-2. Disable browser-specific Secure DNS overrides unless they are explicitly
-   included in the test plan.
-3. Use the generated TUN profile with `strict_route: true`.
-4. Treat IPv6 as unavailable unless an IPv6 tunnel and its kill switch have
-   been separately audited. The sample profile blocks IPv6 while active.
-5. Verify that the tunnel endpoint itself is excluded from the TUN route to
-   avoid a route loop.
-
-The server uses AdGuard's actual root-level `querylog` and `statistics` settings,
-with `enabled: false` and `querylog.file_enabled: false`. Incoming plain DNS is
-disabled; private DoT/DoQ use port 853 and private DoH uses port 8445. Its writable
-config and working data are under `/run/fortress/adguard` on checked `tmpfs`; a
-root-owned template restores that policy at boot. This minimizes
-local application persistence. It cannot prevent host, kernel, cloud-provider,
-backup, upstream-DNS, or administrator observation.
+The server uses AdGuard's root-level `querylog` and `statistics` settings with `enabled: false`.
+Its caching is configured for optimal performance with `cache_optimistic: true`, `cache_ttl_min: 300`,
+and parallel multi-upstream querying (Quad9, Cloudflare, AdGuard).
+Its writable config and working data reside on volatile `tmpfs` under `/run/fortress/adguard`.
 
 ## Traffic-Only mode
 

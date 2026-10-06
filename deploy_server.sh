@@ -308,6 +308,39 @@ if [ -e "$AGH_CONFIG" ]; then
     chattr -i "$AGH_CONFIG" 2>/dev/null || true
 fi
 
+# Generate DNSCrypt configuration if not present
+if [ ! -f "$DISK_DIR/dnscrypt.yaml" ]; then
+    python3 - <<PY
+import subprocess, re
+def gen_keys(alg):
+    out = subprocess.check_output(['openssl', 'genpkey', '-algorithm', alg, '-text']).decode()
+    m_priv = re.search(r'priv:\s*([0-9a-f:\s]+?)\s*pub:', out, re.I)
+    priv_hex = re.sub(r'[^0-9a-fA-F]', '', m_priv.group(1)).upper()
+    m_pub = re.search(r'pub:\s*([0-9a-f:\s]+)', out, re.I)
+    pub_hex = re.sub(r'[^0-9a-fA-F]', '', m_pub.group(1))[:64].upper()
+    return priv_hex, pub_hex
+
+priv_ed, pub_ed = gen_keys('ed25519')
+priv_x, pub_x = gen_keys('x25519')
+domain = "${DOMAIN}"
+prov = f"2.dnscrypt-cert.{domain}" if domain else "2.dnscrypt-cert.fortress"
+content = (
+    f"provider_name: {prov}\n"
+    f"public_key: {pub_ed}\n"
+    f"private_key: {priv_ed}{pub_ed}\n"
+    f"resolver_secret: {priv_x}\n"
+    f"resolver_public: {pub_x}\n"
+    f"es_version: 1\n"
+    f"certificate_ttl: 0s\n"
+)
+with open("$DISK_DIR/dnscrypt.yaml", "w") as f:
+    f.write(content)
+PY
+    chmod 0600 "$DISK_DIR/dnscrypt.yaml"
+    chown root:"$FORTRESS_USER" "$DISK_DIR/dnscrypt.yaml"
+fi
+install -m 0600 -o "$FORTRESS_USER" -g "$FORTRESS_USER" "$DISK_DIR/dnscrypt.yaml" "${RAM_DIR}/adguard/dnscrypt.yaml"
+
 cat <<EOF > "$AGH_CONFIG"
 schema_version: 29
 http:
@@ -335,8 +368,7 @@ log:
   verbose: false
 dns:
   bind_hosts:
-    - 127.0.0.1
-    - 10.8.0.1
+    - 0.0.0.0
   port: 5335
   anonymize_client_ip: true
   protection_enabled: true
@@ -349,22 +381,22 @@ dns:
   ratelimit: 100
   ratelimit_subnet_len_ipv4: 24
   ratelimit_subnet_len_ipv6: 56
-  ratelimit_whitelist: []
+  ratelimit_whitelist:
+    - 127.0.0.1
+    - 10.8.0.1
   refuse_any: true
   upstream_dns:
-    - tls://dns.quad9.net
     - https://dns.quad9.net/dns-query
-    - tls://one.one.one.one
-    - tls://dns.cloudflare.com
+    - tls://dns.quad9.net
+    - https://cloudflare-dns.com/dns-query
+    - quic://dns.adguard-dns.com
   upstream_dns_file: ""
   bootstrap_dns:
     - 9.9.9.9
     - 1.1.1.1
-  upstream_mode: load_balance
+  upstream_mode: parallel
   fastest_timeout: 1s
-  allowed_clients:
-    - 127.0.0.0/8
-    - 10.8.0.0/24
+  allowed_clients: []
   disallowed_clients: []
   blocked_hosts:
     - version.bind
@@ -374,9 +406,9 @@ dns:
     - 127.0.0.0/8
     - 10.8.0.0/24
   cache_size: 4194304
-  cache_ttl_min: 0
-  cache_ttl_max: 0
-  cache_optimistic: false
+  cache_ttl_min: 300
+  cache_ttl_max: 86400
+  cache_optimistic: true
   edns_client_subnet:
     custom_ip: ""
     enabled: false
@@ -384,15 +416,16 @@ dns:
   max_goroutines: 300
   handle_ddr: false
   use_private_ptr_resolvers: false
-  serve_plain_dns: false
+  serve_plain_dns: true
 tls:
   enabled: true
   server_name: "${DOMAIN}"
-  force_https: true
+  force_https: false
   port_https: 8445
   port_dns_over_tls: 853
   port_dns_over_quic: 853
-  port_dnscrypt: 0
+  port_dnscrypt: 5443
+  dnscrypt_config_file: "${RAM_DIR}/adguard/dnscrypt.yaml"
   allow_unencrypted_doh: false
   certificate_path: "${RAM_DIR}/cert.pem"
   private_key_path: "${RAM_DIR}/key.pem"
@@ -888,14 +921,14 @@ iptables -C INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/nu
     iptables -I INPUT 1 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 iptables -C INPUT -i lo -j ACCEPT 2>/dev/null || \
     iptables -I INPUT 2 -i lo -j ACCEPT
-iptables -C INPUT -p tcp -m multiport --dports 22,443,8080,8443,10443 -j ACCEPT 2>/dev/null || \
-    iptables -I INPUT 3 -p tcp -m multiport --dports 22,443,8080,8443,10443 -j ACCEPT
-iptables -C INPUT -p udp -m multiport --dports 443,8443,9443,9444,10443,51820 -j ACCEPT 2>/dev/null || \
-    iptables -I INPUT 4 -p udp -m multiport --dports 443,8443,9443,9444,10443,51820 -j ACCEPT
-iptables -C INPUT -i wg0 -d 10.8.0.1 -p tcp -m multiport --dports 5335,853 -j ACCEPT 2>/dev/null || \
-    iptables -I INPUT 5 -i wg0 -d 10.8.0.1 -p tcp -m multiport --dports 5335,853 -j ACCEPT
-iptables -C INPUT -i wg0 -d 10.8.0.1 -p udp -m multiport --dports 5335,853 -j ACCEPT 2>/dev/null || \
-    iptables -I INPUT 6 -i wg0 -d 10.8.0.1 -p udp -m multiport --dports 5335,853 -j ACCEPT
+iptables -C INPUT -p tcp -m multiport --dports 22,443,5443,8080,8443,10443 -j ACCEPT 2>/dev/null || \
+    iptables -I INPUT 3 -p tcp -m multiport --dports 22,443,5443,8080,8443,10443 -j ACCEPT
+iptables -C INPUT -p udp -m multiport --dports 443,5443,8443,9443,9444,10443,51820 -j ACCEPT 2>/dev/null || \
+    iptables -I INPUT 4 -p udp -m multiport --dports 443,5443,8443,9443,9444,10443,51820 -j ACCEPT
+iptables -C INPUT -i wg0 -d 10.8.0.1 -p tcp -m multiport --dports 5335,853,5443,8445 -j ACCEPT 2>/dev/null || \
+    iptables -I INPUT 5 -i wg0 -d 10.8.0.1 -p tcp -m multiport --dports 5335,853,5443,8445 -j ACCEPT
+iptables -C INPUT -i wg0 -d 10.8.0.1 -p udp -m multiport --dports 5335,853,5443,8445 -j ACCEPT 2>/dev/null || \
+    iptables -I INPUT 6 -i wg0 -d 10.8.0.1 -p udp -m multiport --dports 5335,853,5443,8445 -j ACCEPT
 
 # Keep VPN forwarding in a dedicated chain so its ordering is deterministic:
 # metadata is blocked before established/forwarding accepts, and masquerading
