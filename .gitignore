@@ -102,3 +102,4 @@ collect_server_forensics.py
 verify_endpoints.py
 setup_duckdns_hooks.py
 run_inspect.py
+ssh_remote.py

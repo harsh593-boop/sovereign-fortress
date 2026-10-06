@@ -17,6 +17,7 @@ import shutil
 import tarfile
 import io
 import json
+import argparse
 from pathlib import Path
 
 DISK_DIR = Path("/etc/fortress")
@@ -87,28 +88,18 @@ def get_status():
 
 
 def encrypt_data(data: bytes, passphrase: str) -> bytes:
+    env = os.environ.copy()
+    env["VAULT_PASS"] = passphrase
     p = subprocess.Popen(
-        ["openssl", "enc", "-aes-256-gcm", "-pbkdf2", "-iter", "100000", "-salt", "-pass", "stdin"],
+        ["openssl", "enc", "-aes-256-cbc", "-pbkdf2", "-iter", "100000", "-salt", "-pass", "env:VAULT_PASS"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE
+        stderr=subprocess.PIPE,
+        env=env
     )
-    stdout, stderr = p.communicate(input=passphrase.encode("utf-8") + b"\n" + data)
-    # OpenSSL enc format: prompt passphrase via stdin
+    stdout, stderr = p.communicate(input=data)
     if p.returncode != 0:
-        # Fallback to pass:env to prevent command-line exposure
-        env = os.environ.copy()
-        env["VAULT_PASS"] = passphrase
-        p2 = subprocess.Popen(
-            ["openssl", "enc", "-aes-256-gcm", "-pbkdf2", "-iter", "100000", "-salt", "-pass", "env:VAULT_PASS"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=env
-        )
-        stdout, stderr = p2.communicate(input=data)
-        if p2.returncode != 0:
-            raise RuntimeError(f"OpenSSL encryption failed: {stderr.decode(errors='replace')}")
+        raise RuntimeError(f"OpenSSL encryption failed: {stderr.decode(errors='replace')}")
     return stdout
 
 
@@ -116,7 +107,7 @@ def decrypt_data(ciphertext: bytes, passphrase: str) -> bytes:
     env = os.environ.copy()
     env["VAULT_PASS"] = passphrase
     p = subprocess.Popen(
-        ["openssl", "enc", "-d", "-aes-256-gcm", "-pbkdf2", "-iter", "100000", "-pass", "env:VAULT_PASS"],
+        ["openssl", "enc", "-d", "-aes-256-cbc", "-pbkdf2", "-iter", "100000", "-pass", "env:VAULT_PASS"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -145,7 +136,7 @@ def secure_shred(path: Path):
         path.unlink(missing_ok=True)
 
 
-def lock_vault():
+def lock_vault(passphrase: str = None):
     check_root()
     print("[*] Preparing to lock and encrypt all Sovereign Fortress server keys...")
 
@@ -175,24 +166,30 @@ def lock_vault():
 
     tar_bytes = archive_buf.getvalue()
 
-    # Prompt passphrase
-    while True:
-        pass1 = getpass.getpass("[?] Enter Master Vault Passphrase (min 10 characters): ")
-        if len(pass1) < 10:
-            print("[-] Passphrase must be at least 10 characters long.")
-            continue
-        pass2 = getpass.getpass("[?] Confirm Master Vault Passphrase: ")
-        if pass1 != pass2:
-            print("[-] Passphrases do not match. Try again.")
-            continue
-        break
+    # Passphrase handling
+    if not passphrase:
+        while True:
+            pass1 = getpass.getpass("[?] Enter Master Vault Passphrase (min 10 characters): ")
+            if len(pass1) < 10:
+                print("[-] Passphrase must be at least 10 characters long.")
+                continue
+            pass2 = getpass.getpass("[?] Confirm Master Vault Passphrase: ")
+            if pass1 != pass2:
+                print("[-] Passphrases do not match. Try again.")
+                continue
+            passphrase = pass1
+            break
+    else:
+        if len(passphrase) < 10:
+            print("[-] Error: Passphrase must be at least 10 characters long.", file=sys.stderr)
+            sys.exit(1)
 
-    print("[*] Encrypting with AES-256-GCM (PBKDF2 100,000 iterations)...")
-    encrypted_bytes = encrypt_data(tar_bytes, pass1)
+    print("[*] Encrypting with AES-256-CBC (PBKDF2 100,000 iterations)...")
+    encrypted_bytes = encrypt_data(tar_bytes, passphrase)
 
     # Test decrypt to verify validity before deleting anything
     print("[*] Verifying encrypted vault integrity...")
-    test_decrypted = decrypt_data(encrypted_bytes, pass1)
+    test_decrypted = decrypt_data(encrypted_bytes, passphrase)
     if test_decrypted != tar_bytes:
         raise RuntimeError("Self-verification integrity mismatch. Encryption aborted.")
 
@@ -221,13 +218,14 @@ def lock_vault():
     print("[!] On reboot, run: 'sudo python3 manage_server_vault.py unlock' to supply the passphrase.")
 
 
-def unlock_vault():
+def unlock_vault(passphrase: str = None):
     check_root()
     if not VAULT_FILE.is_file():
         print(f"[-] Error: Vault file {VAULT_FILE} not found. Server is not in vault-locked mode.", file=sys.stderr)
         sys.exit(1)
 
-    passphrase = getpass.getpass("[?] Enter Master Vault Passphrase: ")
+    if not passphrase:
+        passphrase = getpass.getpass("[?] Enter Master Vault Passphrase: ")
     print("[*] Decrypting vault into volatile RAM tmpfs (/run/fortress)...")
 
     try:
@@ -331,23 +329,21 @@ def purge_ram():
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: sudo python3 manage_server_vault.py [status|lock|unlock|purge-ram]")
-        sys.exit(0)
+    parser = argparse.ArgumentParser(description="Sovereign Fortress Memory & Vault Manager")
+    parser.add_argument("command", choices=["status", "lock", "unlock", "purge-ram"], help="Action to perform")
+    parser.add_argument("--passphrase", "-p", dest="passphrase", default=None, help="Master Vault Passphrase (or set VAULT_PASSPHRASE env var)")
+    args = parser.parse_args()
 
-    cmd = sys.argv[1].lower()
-    if cmd == "status":
+    passphrase = args.passphrase or os.environ.get("VAULT_PASSPHRASE")
+
+    if args.command == "status":
         get_status()
-    elif cmd == "lock":
-        lock_vault()
-    elif cmd == "unlock":
-        unlock_vault()
-    elif cmd == "purge-ram":
+    elif args.command == "lock":
+        lock_vault(passphrase)
+    elif args.command == "unlock":
+        unlock_vault(passphrase)
+    elif args.command == "purge-ram":
         purge_ram()
-    else:
-        print(f"[-] Unknown command: {cmd}")
-        print("Usage: sudo python3 manage_server_vault.py [status|lock|unlock|purge-ram]")
-        sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -40,10 +40,22 @@ def ensure_dnscrypt_config(user_uid, user_gid, domain=None):
                 persistent.write_text(text)
         except Exception:
             pass
+    elif not persistent.exists() and runtime.exists() and domain:
+        try:
+            text = runtime.read_text()
+            expected_prov = f"2.dnscrypt-cert.{domain}"
+            m = re.search(r'provider_name:\s*(.+)', text)
+            if m and m.group(1).strip() != expected_prov:
+                text = re.sub(r'provider_name:\s*.+', f'provider_name: {expected_prov}', text)
+                runtime.write_text(text)
+        except Exception:
+            pass
 
-    if not persistent.exists():
+    if not persistent.exists() and not runtime.exists():
         d_name = domain or ""
         cfg_path = DISK / 'fortress_config.json'
+        if not cfg_path.exists():
+            cfg_path = RAM / 'fortress_config.json'
         if not d_name and cfg_path.exists():
             try:
                 cfg = json.loads(cfg_path.read_text())
@@ -78,8 +90,9 @@ def ensure_dnscrypt_config(user_uid, user_gid, domain=None):
         )
         atomic_file(persistent, content, mode=0o600, uid=0, gid=user_gid)
 
-    runtime.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    atomic_file(runtime, persistent.read_bytes(), mode=0o600, uid=user_uid, gid=user_gid)
+    if persistent.exists():
+        runtime.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        atomic_file(runtime, persistent.read_bytes(), mode=0o600, uid=user_uid, gid=user_gid)
 
 
 def harden_adguard(config, domain=None):
