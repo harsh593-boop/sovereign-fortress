@@ -354,7 +354,7 @@ DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
             <p>Never display or copy SSH enrollment secrets into this dashboard. Rotate the previously exposed TOTP seed and enroll it directly on the server.</p>
         </div>
 
-        <h3 style="font-size: 16px; color: #fff; margin-bottom: 12px;">⚡ Direct Protocol &amp; DNS Links (7 Proxies + DNSCrypt v2 + Auto-Fastest Balancer)</h3>
+        <h3 style="font-size: 16px; color: #fff; margin-bottom: 12px;">⚡ Direct Protocol &amp; Encrypted DNS Links (7 Proxies + DoT / DoQ / DoH / DNSCrypt v2)</h3>
 <div class="grid">
     <div class="proto-card">
         <div>
@@ -420,6 +420,35 @@ DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
         <div style="display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
             <button class="btn btn-primary" onclick="copyText('{{DNSCRYPT_STAMP}}', 'WAN DNSCrypt Stamp copied!')">Copy Stamp (WAN / DuckDNS)</button>
             <button class="btn btn-sec" onclick="copyText('{{DNSCRYPT_STAMP_VPN}}', 'VPN DNSCrypt Stamp copied!')">Copy Stamp (VPN 10.8.0.1)</button>
+        </div>
+    </div>
+    <div class="proto-card">
+        <div>
+            <div class="proto-title">🔐 Fortress-DoT (DNS-over-TLS · Port 853)</div>
+            <div class="proto-desc">Transport: TCP · TLS 1.3 encryption on standard port 853. Native Android Private DNS support. Works standalone (WAN) and inside VPN without tunnels.</div>
+        </div>
+        <div style="display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
+            <button class="btn btn-primary" onclick="copyText('{{DOMAIN_TARGET}}', 'Android Private DNS Hostname copied!')">Copy Android Hostname</button>
+            <button class="btn btn-sec" onclick="copyText('{{DOT_URI}}', 'DoT URI copied!')">Copy DoT URI</button>
+        </div>
+    </div>
+    <div class="proto-card">
+        <div>
+            <div class="proto-title">⚡ Fortress-DoQ (DNS-over-QUIC · Port 853)</div>
+            <div class="proto-desc">Transport: UDP · RFC 9250 QUIC + TLS 1.3 · 0-RTT connection resumption and zero head-of-line packet blocking on mobile networks. Native in AdGuard apps (Android, iOS, macOS).</div>
+        </div>
+        <div style="display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
+            <button class="btn btn-primary" onclick="copyText('{{DOQ_URI}}', 'DoQ URI copied!')">Copy DoQ URI</button>
+        </div>
+    </div>
+    <div class="proto-card">
+        <div>
+            <div class="proto-title">🌐 Fortress-DoH (DNS-over-HTTPS · Port 8445)</div>
+            <div class="proto-desc">Transport: TCP · HTTPS (HTTP/2 &amp; HTTP/3) with TLS 1.3. Compatible with Chrome, Firefox, Safari, Edge ('Secure DNS'), and YogaDNS DoH rules.</div>
+        </div>
+        <div style="display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
+            <button class="btn btn-primary" onclick="copyText('{{DOH_URL_WAN}}', 'WAN DoH URL copied!')">Copy DoH (WAN / DuckDNS)</button>
+            <button class="btn btn-sec" onclick="copyText('{{DOH_URL_VPN}}', 'VPN DoH URL copied!')">Copy DoH (VPN 10.8.0.1)</button>
         </div>
     </div>
 </div>
@@ -1408,7 +1437,8 @@ def render_login_page(error_msg=None):
     return html
 
 def render_dashboard_page(token, totp_secret, session=""):
-    host_for_sub = endpoint_host(DOMAIN if (DOMAIN and not DOMAIN.startswith("<")) else SERVER_IP)
+    domain_target = DOMAIN if (DOMAIN and not DOMAIN.startswith("<")) else SERVER_IP
+    host_for_sub = endpoint_host(domain_target)
     sub_full_url = f"https://{host_for_sub}:{PORT}/sub/{token}?mode=full"
     sub_traffic_url = f"https://{host_for_sub}:{PORT}/sub/{token}?mode=traffic-only"
     sub_b64_url = f"https://{host_for_sub}:{PORT}/sub/{token}/b64"
@@ -1418,9 +1448,14 @@ def render_dashboard_page(token, totp_secret, session=""):
     nekobox_traffic = build_nekobox_link(sub_traffic_url, "Sovereign-Fortress-(Traffic-Only)")
     vless, hy2_sal, hy2_std, tuic, ss, wg_native, wg_tcp = get_protocol_links()
     dnscrypt_stamp_wan, dnscrypt_stamp_vpn = get_dnscrypt_stamps()
+    dot_uri = f"tls://{domain_target}:853"
+    doq_uri = f"quic://{domain_target}:853"
+    doh_url_wan = f"https://{domain_target}:8445/dns-query"
+    doh_url_vpn = f"https://10.8.0.1:8445/dns-query"
 
     html = DASHBOARD_HTML_TEMPLATE
     html = html.replace("{{SERVER_IP}}", SERVER_IP)
+    html = html.replace("{{DOMAIN_TARGET}}", domain_target)
     html = html.replace("{{DNS_PORT}}", str(DNS_PORT))
     html = html.replace("{{DNSCRYPT_PORT}}", str(DNSCRYPT_PORT))
     html = html.replace("{{CAMPUS_DOMAIN}}", CAMPUS_DOMAIN)
@@ -1444,6 +1479,10 @@ def render_dashboard_page(token, totp_secret, session=""):
     html = html.replace("{{WG_TCP}}", wg_tcp)
     html = html.replace("{{DNSCRYPT_STAMP}}", dnscrypt_stamp_wan)
     html = html.replace("{{DNSCRYPT_STAMP_VPN}}", dnscrypt_stamp_vpn)
+    html = html.replace("{{DOT_URI}}", dot_uri)
+    html = html.replace("{{DOQ_URI}}", doq_uri)
+    html = html.replace("{{DOH_URL_WAN}}", doh_url_wan)
+    html = html.replace("{{DOH_URL_VPN}}", doh_url_vpn)
     html = html.replace("{{CSRF_TOKEN}}", session_csrf_token(session))
     return html
 
@@ -1659,14 +1698,22 @@ class FortressSubHandler(BaseHTTPRequestHandler):
             if sub_format in ["traffic-only", "split", "direct-dns", "yogadns"]:
                 mode = "traffic-only"
                 fmt = None
-            if len(sub_parts) > 2 or fmt not in (None, "b64", "links", "wg", "wireguard", "wg-tcp", "wireguard-tcp", "dnscrypt"):
+            if len(sub_parts) > 2 or fmt not in (None, "b64", "links", "wg", "wireguard", "wg-tcp", "wireguard-tcp", "dnscrypt", "dns"):
                 self.json_response(400, {"success": False, "error": "Unsupported subscription format"})
                 return
 
-            if fmt == "dnscrypt":
+            if fmt in ("dnscrypt", "dns"):
                 stamp_wan, stamp_vpn = get_dnscrypt_stamps()
+                domain_target = DOMAIN if (DOMAIN and not DOMAIN.startswith("<")) else SERVER_IP
                 lines = [
-                    f"# Sovereign Fortress DNSCrypt (Port {DNSCRYPT_PORT})",
+                    f"# Sovereign Fortress Encrypted DNS Endpoints",
+                    f"# DoT (DNS-over-TLS - Port 853 TCP): tls://{domain_target}:853",
+                    f"# Android Private DNS Hostname: {domain_target}",
+                    f"# DoQ (DNS-over-QUIC - Port 853 UDP): quic://{domain_target}:853",
+                    f"# DoH (DNS-over-HTTPS - Port 8445 TCP): https://{domain_target}:8445/dns-query",
+                    f"# DoH VPN (10.8.0.1:8445): https://10.8.0.1:8445/dns-query",
+                    f"",
+                    f"# Sovereign Fortress DNSCrypt v2 (Port {DNSCRYPT_PORT}):",
                     f"# WAN / DuckDNS Stamp:",
                     stamp_wan,
                     f"",

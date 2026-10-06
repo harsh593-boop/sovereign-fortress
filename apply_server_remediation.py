@@ -161,10 +161,13 @@ def firewall_rules(uid):
     return [
         ('INPUT', ['-i', 'wg0', '-d', '10.8.0.1', '-p', proto, '--dport', port, '-j', 'ACCEPT'])
         for proto in ('tcp', 'udp')
-        for port in ('5335', '5443')
+        for port in ('5335', '853', '5443', '8445')
     ] + [
-        ('INPUT', ['-p', proto, '--dport', '5443', '-j', 'ACCEPT'])
+        ('INPUT', ['-p', proto, '--dport', port, '-j', 'ACCEPT'])
         for proto in ('tcp', 'udp')
+        for port in ('853', '5443')
+    ] + [
+        ('INPUT', ['-p', 'tcp', '--dport', '8445', '-j', 'ACCEPT'])
     ] + [('OUTPUT', ['-m', 'owner', '--uid-owner', str(uid), '-d', '169.254.0.0/16', '-j', 'REJECT']),
          ('FORWARD', ['-i', 'wg0', '-d', '169.254.0.0/16', '-j', 'REJECT'])]
 

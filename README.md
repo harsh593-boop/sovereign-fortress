@@ -40,9 +40,10 @@ Full-Tunnel and Traffic-Only both use TUN in the reference profiles. Traffic-Onl
 means intended local DNS egress alongside tunneled payload traffic, **not**
 system-proxy-only mode. Full-Tunnel routes DNS to AdGuard Home on the VPS (`10.8.0.1:5335` plain UDP DNS)
 encapsulated inside the encrypted proxy tunnel (`detour: proxy`), delivering instant 0-RTT speed
-without double-TLS overhead. AdGuard Home also provides a dedicated **DNSCrypt v2** resolver on port `5443`
-(Curve25519 & Ed25519 authenticated), with 1-click DNS stamps (`sdns://...`) exportable in the portal for YogaDNS,
-Simple DNSCrypt, and dnscrypt-proxy. AdGuard caching is tuned with optimistic prefetching and parallel upstreams.
+without double-TLS overhead. Standalone users can connect directly to encrypted DNS over WAN without running any VPN:
+**DoT** (port 853 TCP, Android Private DNS: `<domain>`), **DoQ** (port 853 UDP), **DoH** (port 8445 TCP),
+and **DNSCrypt v2** (port 5443 TCP/UDP with RFC-compliant `sdns://...` stamps exportable in the portal).
+AdGuard caching is tuned with optimistic prefetching, 4MB cache, and parallel upstream resolution.
 
 Private Windows client files belong under `%LOCALAPPDATA%\\SovereignFortress`,
 not the public checkout. The GUI can load a user-bound DPAPI `.enc` config
@@ -211,7 +212,7 @@ The automated installer will:
 2. Optionally mount a 256 MB volatile RAM disk (`tmpfs`) at `/run/fortress` for selected runtime state; verify host logging separately.
 3. Install pinned Sing-box 1.14.2 Core and WSTunnel with SHA-256 cryptographic verification.
 4. Generate 100% unique, high-entropy cryptographic keys for all protocols (UUID, x25519 Reality keypairs, Hysteria 2 / Salamander passwords, Shadowsocks-2022 AEAD keys, WireGuard keypairs, and a 128-bit Master Subscription Token `ft_sec_...`).
-5. Configure AdGuard Home on private WireGuard/loopback listeners with private DoT/DoQ (853) and DoH (8445); incoming plain DNS is disabled, while DNS and host-provider metadata remain deployment-dependent.
+5. Configure AdGuard Home with standalone and in-tunnel encrypted DNS: DoT/DoQ (port 853), DoH (port 8445), and DNSCrypt v2 (port 5443); WAN plain DNS (port 5335) is dropped by firewall policies, while encrypted resolvers are protected by TLS 1.3 / Perfect Forward Secrecy.
 6. Leave SSH authentication unchanged by default. SSH/PAM changes require explicit `FORTRESS_CONFIGURE_SSH_2FA=1`, an enrolled `FORTRESS_ADMIN_USER`, and verified recovery access. Portal TOTP is separate and opt-in; never reuse the SSH seed.
 7. Enforce strict firewall policies and disable IPv6 to prevent network leaks.
 8. Launch the dynamic HTTPS subscription daemon and management portal on port `8443`.
@@ -308,7 +309,7 @@ See [`yogadns_rules.md`](yogadns_rules.md) for full step-by-step instructions:
 * **Portal authentication:** High-entropy bearer token, with a separate optional second factor. Short OTPs alone cannot authenticate or export profiles; subscription URLs require the bearer token.
 * **Active Defense Camouflage:** Unauthorized requests automatically detour to Apple CDN edge.
 * **Optional Volatile Runtime:** Selected active state can operate in `/run/fortress` (`tmpfs`); operators must verify mounts, service permissions, host logs, and persistent templates themselves.
-* **Encrypted DNS:** The current VPS uses a DuckDNS-certificate-backed private DoT/DoQ endpoint on 853 and private DoH on 8445. Incoming plain DNS is disabled. DNSCrypt is not enabled until a verified provider configuration/stamp is provisioned.
+* **Standalone & In-Tunnel Encrypted DNS:** AdGuard Home provides a full suite of encrypted DNS resolvers accessible both standalone over WAN (DuckDNS domain) and within the WireGuard/Sing-box VPN: **DoT** (port 853 TCP, native Android Private DNS), **DoQ** (port 853 UDP, RFC 9250 QUIC), **DoH** (port 8445 TCP/HTTP/3), and **DNSCrypt v2** (port 5443 TCP/UDP, Curve25519 & Ed25519 authenticated with 1-click `sdns://` stamps). Plain DNS on port 5335 is strictly blocked on the WAN interface and only accessible inside the encrypted VPN tunnel for 0-RTT resolution.
 * **Automatic maintenance:** Ubuntu security updates are enabled without automatic reboot. AdGuard has a weekly official self-update timer with root-only backup and service-health rollback. Sing-box and wstunnel remain separately pinned and reviewed.
 * **Client DPAPI Protection:** Local keys encrypted at rest using Windows user-bound DPAPI (`CryptProtectData`).
 * **Local Cleanup Helper:** `Shred-Fortress.ps1` can remove local working files, but storage, filesystem, and backup behavior determine whether recovery is possible.

@@ -921,10 +921,10 @@ iptables -C INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/nu
     iptables -I INPUT 1 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 iptables -C INPUT -i lo -j ACCEPT 2>/dev/null || \
     iptables -I INPUT 2 -i lo -j ACCEPT
-iptables -C INPUT -p tcp -m multiport --dports 22,443,5443,8080,8443,10443 -j ACCEPT 2>/dev/null || \
-    iptables -I INPUT 3 -p tcp -m multiport --dports 22,443,5443,8080,8443,10443 -j ACCEPT
-iptables -C INPUT -p udp -m multiport --dports 443,5443,8443,9443,9444,10443,51820 -j ACCEPT 2>/dev/null || \
-    iptables -I INPUT 4 -p udp -m multiport --dports 443,5443,8443,9443,9444,10443,51820 -j ACCEPT
+iptables -C INPUT -p tcp -m multiport --dports 22,443,853,5443,8080,8443,8445,10443 -j ACCEPT 2>/dev/null || \
+    iptables -I INPUT 3 -p tcp -m multiport --dports 22,443,853,5443,8080,8443,8445,10443 -j ACCEPT
+iptables -C INPUT -p udp -m multiport --dports 443,853,5443,8443,9443,9444,10443,51820 -j ACCEPT 2>/dev/null || \
+    iptables -I INPUT 4 -p udp -m multiport --dports 443,853,5443,8443,9443,9444,10443,51820 -j ACCEPT
 iptables -C INPUT -i wg0 -d 10.8.0.1 -p tcp -m multiport --dports 5335,853,5443,8445 -j ACCEPT 2>/dev/null || \
     iptables -I INPUT 5 -i wg0 -d 10.8.0.1 -p tcp -m multiport --dports 5335,853,5443,8445 -j ACCEPT
 iptables -C INPUT -i wg0 -d 10.8.0.1 -p udp -m multiport --dports 5335,853,5443,8445 -j ACCEPT 2>/dev/null || \
