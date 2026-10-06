@@ -24,6 +24,10 @@ DISK_DIR = Path("/etc/fortress")
 RAM_DIR = Path("/run/fortress")
 STATE_DIR = Path("/var/lib/fortress/subscription")
 VAULT_FILE = DISK_DIR / "vault.enc"
+LUKS_IMAGE = Path("/var/fortress.luks")
+LUKS_NAME = "fortress-secure"
+LUKS_DEV = Path(f"/dev/mapper/{LUKS_NAME}")
+LUKS_MOUNT = Path("/var/fortress-storage")
 
 SENSITIVE_FILES = [
     "key.pem",
@@ -55,8 +59,44 @@ def is_tmpfs(path: Path) -> bool:
         return False
 
 
+def is_mounted(path: Path) -> bool:
+    try:
+        out = subprocess.check_output(["findmnt", "-n", "--target", str(path)],
+                                      stderr=subprocess.DEVNULL).decode().strip()
+        return bool(out)
+    except Exception:
+        return False
+
+
+def is_luks_active() -> bool:
+    try:
+        res = subprocess.run(["cryptsetup", "status", LUKS_NAME],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return res.returncode == 0
+    except Exception:
+        return False
+
+
 def get_status():
-    vault_exists = VAULT_FILE.is_file()
+    luks_exists = LUKS_IMAGE.is_file()
+    luks_active = is_luks_active()
+    luks_mounted = is_mounted(LUKS_MOUNT)
+    luks_cipher = "None"
+    luks_size = "0 GB"
+    if luks_exists:
+        luks_size = f"{LUKS_IMAGE.stat().st_size / (1024**3):.1f} GB"
+    if luks_active:
+        try:
+            c_info = subprocess.check_output(["cryptsetup", "status", LUKS_NAME], stderr=subprocess.DEVNULL).decode()
+            for line in c_info.splitlines():
+                if "cipher:" in line.lower():
+                    luks_cipher = line.split(":", 1)[1].strip()
+                elif "keysize:" in line.lower():
+                    luks_cipher += f" ({line.split(':', 1)[1].strip()} bits)"
+        except Exception:
+            luks_cipher = "aes-xts-plain64 (512 bits)"
+
+    vault_exists = VAULT_FILE.is_file() or (luks_mounted and (LUKS_MOUNT / "etc" / "vault.enc").is_file())
     disk_plaintext = [f for f in SENSITIVE_FILES if (DISK_DIR / f).is_file()]
     ram_mounted = is_tmpfs(RAM_DIR)
     ram_keys = [f for f in SENSITIVE_FILES if (RAM_DIR / f).is_file() or (RAM_DIR / "wireguard" / f).is_file() or (RAM_DIR / "adguard" / f).is_file()]
@@ -70,17 +110,25 @@ def get_status():
             active_svcs.append(f"{s}: UNKNOWN")
 
     print("=================================================================")
-    print("      SOVEREIGN FORTRESS — SERVER MEMORY & VAULT STATUS          ")
+    print("      SOVEREIGN FORTRESS — SERVER MEMORY & STORAGE STATUS        ")
     print("=================================================================")
-    print(f"[*] Encrypted Vault File:   {'PRESENT (' + str(VAULT_FILE) + ')' if vault_exists else 'NOT CREATED'}")
+    if luks_exists:
+        print(f"[*] LUKS2 Volume Image:     PRESENT ({LUKS_IMAGE}, {luks_size})")
+        print(f"[*] LUKS2 Device Status:    {'ACTIVE (' + str(LUKS_DEV) + ', Cipher: ' + luks_cipher + ')' if luks_active else 'LOCKED / INACTIVE'}")
+        print(f"[*] LUKS2 Mount Point:      {'MOUNTED (' + str(LUKS_MOUNT) + ')' if luks_mounted else 'UNMOUNTED'}")
+    else:
+        print(f"[*] LUKS2 Volume Image:     NOT INITIALIZED (Run 'setup-luks' to provision)")
+    print(f"[*] Encrypted Vault File:   {'PRESENT' if vault_exists else 'NOT CREATED'}")
     print(f"[*] Disk Plaintext Keys:    {'EXPOSED (' + str(len(disk_plaintext)) + ' files: ' + ', '.join(disk_plaintext[:4]) + '...)' if disk_plaintext else 'CLEAN (0 plaintext keys on disk)'}")
     print(f"[*] RAM tmpfs (/run):       {'MOUNTED (tmpfs 256M)' if ram_mounted else 'NOT MOUNTED'}")
     print(f"[*] Active RAM Keys:        {'LOADED (' + str(len(ram_keys)) + ' keys in volatile memory)' if ram_keys else 'EMPTY'}")
     print(f"[*] Live Daemon Services:   {', '.join(active_svcs)}")
     print("-----------------------------------------------------------------")
-    if vault_exists and not disk_plaintext and ram_keys:
+    if luks_active and not disk_plaintext and ram_keys:
+        print("[+] STATUS: MAXIMUM SOVEREIGN PROTECTION (LUKS2 512-bit + Volatile RAM Only).")
+    elif vault_exists and not disk_plaintext and ram_keys:
         print("[+] STATUS: 100% SECURE VOLATILE MODE (Keys in RAM only; Disk is encrypted).")
-    elif vault_exists and not disk_plaintext and not ram_keys:
+    elif not ram_keys:
         print("[!] STATUS: COLD-LOCKED (Server rebooted; Run 'unlock' to restore keys to RAM).")
     else:
         print("[!] STATUS: STANDARD DISK MODE (Plaintext keys reside on /etc/fortress).")
@@ -133,7 +181,132 @@ def secure_shred(path: Path):
             f.write(os.urandom(size))
             f.seek(0)
             f.write(b"\x00" * size)
-        path.unlink(missing_ok=True)
+def setup_luks(passphrase: str = None, size_gb: int = 4):
+    check_root()
+    if LUKS_IMAGE.is_file():
+        print(f"[*] LUKS image already exists: {LUKS_IMAGE}")
+        if is_luks_active():
+            print(f"[+] LUKS device is already active at {LUKS_DEV}")
+            if not is_mounted(LUKS_MOUNT):
+                LUKS_MOUNT.mkdir(parents=True, exist_ok=True)
+                os.chmod(LUKS_MOUNT, 0o700)
+                subprocess.run(["mount", str(LUKS_DEV), str(LUKS_MOUNT)], check=True)
+            get_status()
+            return
+        open_luks(passphrase)
+        get_status()
+        return
+
+    if not passphrase:
+        while True:
+            pass1 = getpass.getpass("[?] Enter Master LUKS Passphrase (min 10 characters): ")
+            if len(pass1) < 10:
+                print("[-] Passphrase must be at least 10 characters long.")
+                continue
+            pass2 = getpass.getpass("[?] Confirm Master LUKS Passphrase: ")
+            if pass1 != pass2:
+                print("[-] Passphrases do not match. Try again.")
+                continue
+            passphrase = pass1
+            break
+    else:
+        if len(passphrase) < 10:
+            print("[-] Error: Passphrase must be at least 10 characters long.", file=sys.stderr)
+            sys.exit(1)
+
+    print(f"[*] Allocating {size_gb}GB container file at {LUKS_IMAGE}...")
+    subprocess.run(["fallocate", "-l", f"{size_gb}G", str(LUKS_IMAGE)], check=True)
+    os.chmod(LUKS_IMAGE, 0o600)
+
+    print("[*] Formatting LUKS2 volume (AES-XTS-Plain64 512-bit, PBKDF Argon2id)...")
+    p = subprocess.Popen(
+        [
+            "cryptsetup", "luksFormat",
+            "--type", "luks2",
+            "--cipher", "aes-xts-plain64",
+            "--key-size", "512",
+            "--hash", "sha512",
+            "--pbkdf", "argon2id",
+            "--batch-mode",
+            str(LUKS_IMAGE),
+            "-"
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
+    )
+    stdout, stderr = p.communicate(input=passphrase.encode("utf-8"))
+    if p.returncode != 0:
+        LUKS_IMAGE.unlink(missing_ok=True)
+        raise RuntimeError(f"cryptsetup luksFormat failed: {stderr.decode(errors='replace')}")
+
+    print("[+] LUKS2 container formatted successfully.")
+    open_luks(passphrase)
+
+    print(f"[*] Creating ext4 filesystem on {LUKS_DEV}...")
+    subprocess.run(["mkfs.ext4", "-q", "-L", "fortress_crypt", str(LUKS_DEV)], check=True)
+
+    LUKS_MOUNT.mkdir(parents=True, exist_ok=True)
+    os.chmod(LUKS_MOUNT, 0o700)
+    print(f"[*] Mounting {LUKS_DEV} at {LUKS_MOUNT}...")
+    subprocess.run(["mount", str(LUKS_DEV), str(LUKS_MOUNT)], check=True)
+
+    (LUKS_MOUNT / "adguard").mkdir(parents=True, exist_ok=True)
+    (LUKS_MOUNT / "backups").mkdir(parents=True, exist_ok=True)
+    (LUKS_MOUNT / "etc").mkdir(parents=True, exist_ok=True)
+    if VAULT_FILE.is_file():
+        shutil.copy2(VAULT_FILE, LUKS_MOUNT / "etc" / "vault.enc")
+    print(f"[+] LUKS2 storage initialized and mounted at {LUKS_MOUNT}.")
+    get_status()
+
+
+def open_luks(passphrase: str = None):
+    check_root()
+    if not LUKS_IMAGE.is_file():
+        print(f"[-] LUKS image not found: {LUKS_IMAGE}", file=sys.stderr)
+        return False
+
+    if is_luks_active():
+        print(f"[*] LUKS device is already active at {LUKS_DEV}")
+    else:
+        if not passphrase:
+            passphrase = getpass.getpass("[?] Enter Master LUKS Passphrase: ")
+        print(f"[*] Opening LUKS2 container {LUKS_IMAGE} -> {LUKS_NAME}...")
+        p = subprocess.Popen(
+            [
+                "cryptsetup", "open",
+                "--type", "luks2",
+                str(LUKS_IMAGE),
+                LUKS_NAME,
+                "-"
+            ],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        stdout, stderr = p.communicate(input=passphrase.encode("utf-8"))
+        if p.returncode != 0:
+            raise RuntimeError(f"cryptsetup open failed: {stderr.decode(errors='replace')}")
+        print(f"[+] LUKS2 device opened at {LUKS_DEV}.")
+
+    if not is_mounted(LUKS_MOUNT):
+        LUKS_MOUNT.mkdir(parents=True, exist_ok=True)
+        os.chmod(LUKS_MOUNT, 0o700)
+        print(f"[*] Mounting {LUKS_DEV} at {LUKS_MOUNT}...")
+        subprocess.run(["mount", str(LUKS_DEV), str(LUKS_MOUNT)], check=True)
+        print(f"[+] Mounted at {LUKS_MOUNT}.")
+    return True
+
+
+def close_luks():
+    check_root()
+    if is_mounted(LUKS_MOUNT):
+        print(f"[*] Unmounting {LUKS_MOUNT}...")
+        subprocess.run(["umount", str(LUKS_MOUNT)], check=False)
+    if is_luks_active():
+        print(f"[*] Closing LUKS device {LUKS_NAME}...")
+        subprocess.run(["cryptsetup", "close", LUKS_NAME], check=False)
+        print(f"[+] LUKS device {LUKS_NAME} closed and locked.")
 
 
 def lock_vault(passphrase: str = None):
@@ -220,16 +393,25 @@ def lock_vault(passphrase: str = None):
 
 def unlock_vault(passphrase: str = None):
     check_root()
-    if not VAULT_FILE.is_file():
+    if not passphrase:
+        passphrase = getpass.getpass("[?] Enter Master Passphrase: ")
+
+    # Open LUKS container if present
+    if LUKS_IMAGE.is_file():
+        open_luks(passphrase)
+
+    vault_path = VAULT_FILE
+    if not vault_path.is_file() and is_mounted(LUKS_MOUNT) and (LUKS_MOUNT / "etc" / "vault.enc").is_file():
+        vault_path = LUKS_MOUNT / "etc" / "vault.enc"
+
+    if not vault_path.is_file():
         print(f"[-] Error: Vault file {VAULT_FILE} not found. Server is not in vault-locked mode.", file=sys.stderr)
         sys.exit(1)
 
-    if not passphrase:
-        passphrase = getpass.getpass("[?] Enter Master Vault Passphrase: ")
     print("[*] Decrypting vault into volatile RAM tmpfs (/run/fortress)...")
 
     try:
-        ciphertext = VAULT_FILE.read_bytes()
+        ciphertext = vault_path.read_bytes()
         decrypted_tar = decrypt_data(ciphertext, passphrase)
     except Exception as e:
         print(f"[-] Error: {e}", file=sys.stderr)
@@ -312,12 +494,13 @@ def unlock_vault(passphrase: str = None):
     get_status()
 
 
-def purge_ram():
+def purge_ram(force: bool = False):
     check_root()
-    confirm = input("[!] WARNING: Purging RAM will terminate all VPN & DNS services immediately. Type 'PURGE' to proceed: ")
-    if confirm != "PURGE":
-        print("[-] Aborted.")
-        return
+    if not force:
+        confirm = input("[!] WARNING: Purging RAM will terminate all VPN & DNS services immediately. Type 'PURGE' to proceed: ")
+        if confirm != "PURGE":
+            print("[-] Aborted.")
+            return
 
     print("[*] Stopping services...")
     subprocess.run(["systemctl", "stop"] + SERVICES, check=False)
@@ -325,13 +508,19 @@ def purge_ram():
     for item in RAM_DIR.rglob("*"):
         if item.is_file():
             secure_shred(item)
+
+    if LUKS_IMAGE.is_file():
+        close_luks()
+
     print("[+] RAM purged. System is cold-locked.")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Sovereign Fortress Memory & Vault Manager")
-    parser.add_argument("command", choices=["status", "lock", "unlock", "purge-ram"], help="Action to perform")
-    parser.add_argument("--passphrase", "-p", dest="passphrase", default=None, help="Master Vault Passphrase (or set VAULT_PASSPHRASE env var)")
+    parser = argparse.ArgumentParser(description="Sovereign Fortress Memory & Storage Manager")
+    parser.add_argument("command", choices=["status", "lock", "unlock", "purge-ram", "setup-luks", "open-luks", "close-luks"], help="Action to perform")
+    parser.add_argument("--passphrase", "-p", dest="passphrase", default=None, help="Master Passphrase (or set VAULT_PASSPHRASE env var)")
+    parser.add_argument("--size", "-s", dest="size", type=int, default=4, help="Size of LUKS container in GB (default: 4)")
+    parser.add_argument("--force", "-f", action="store_true", help="Force action without interactive confirmation")
     args = parser.parse_args()
 
     passphrase = args.passphrase or os.environ.get("VAULT_PASSPHRASE")
@@ -343,7 +532,13 @@ def main():
     elif args.command == "unlock":
         unlock_vault(passphrase)
     elif args.command == "purge-ram":
-        purge_ram()
+        purge_ram(args.force)
+    elif args.command == "setup-luks":
+        setup_luks(passphrase, args.size)
+    elif args.command == "open-luks":
+        open_luks(passphrase)
+    elif args.command == "close-luks":
+        close_luks()
 
 
 if __name__ == "__main__":
