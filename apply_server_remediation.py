@@ -116,8 +116,10 @@ def firewall_rules(uid):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--apply', action='store_true', help='explicitly authorize changes')
-    parser.add_argument('--subscription-script', required=True)
-    parser.add_argument('--initializer-script', required=True)
+    parser.add_argument('--subscription-script', default='fortress-sub.py',
+                        help='path to updated fortress-sub.py (default: fortress-sub.py)')
+    parser.add_argument('--initializer-script', default='fortress-init.sh',
+                        help='path to updated fortress-init.sh (default: fortress-init.sh)')
     args = parser.parse_args()
     if not args.apply:
         print('No changes made. Use --apply only after review and backup planning.')
