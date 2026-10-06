@@ -286,7 +286,8 @@ DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
                 </div>
                 <div>
                     <div class="btn-row">
-                        <a href="{{HIDDIFY_FULL}}" class="btn btn-primary">⚡ 1-Click Hiddify</a>
+                        <a href="{{NEKOBOX_FULL}}" class="btn btn-primary">⚡ 1-Click NekoBox</a>
+                        <a href="{{HIDDIFY_FULL}}" class="btn btn-sec">📱 Hiddify</a>
                         <button class="btn btn-sec" onclick="copyText('{{SUB_FULL_URL}}', 'Full Tunnel URL copied!')">📋 Copy URL</button>
                         <button class="btn btn-sec" onclick="setQR('full')">📱 View QR</button>
                     </div>
@@ -310,7 +311,8 @@ DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
                 </div>
                 <div>
                     <div class="btn-row">
-                        <a href="{{HIDDIFY_TRAFFIC}}" class="btn" style="background: linear-gradient(135deg, #9333ea, #c084fc); color: #040914;">⚡ 1-Click Hiddify</a>
+                        <a href="{{NEKOBOX_TRAFFIC}}" class="btn" style="background: linear-gradient(135deg, #9333ea, #c084fc); color: #040914;">⚡ 1-Click NekoBox</a>
+                        <a href="{{HIDDIFY_TRAFFIC}}" class="btn btn-sec">📱 Hiddify</a>
                         <button class="btn btn-sec" onclick="copyText('{{SUB_TRAFFIC_URL}}', 'Traffic-Only URL copied!')">📋 Copy URL</button>
                         <button class="btn btn-sec" onclick="setQR('traffic')">📱 View QR</button>
                     </div>
@@ -330,7 +332,7 @@ DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
                 </div>
                 <h2 id="qr-title">Versioned Full-Tunnel Subscription QR</h2>
                 <p id="qr-desc" style="color:#94a3b8; font-size:13px; margin-top:4px;">
-                    Scan with <strong>Hiddify App</strong> on Android / iOS / Windows. Includes automatic
+                    Scan or import into <strong>NekoBox</strong> (Recommended for Windows) or <strong>Hiddify</strong> (Mobile). Includes automatic
                     <strong>mode-specific routing</strong>: Full Tunnel sends public IPv4 through the VPS; Traffic-Only additionally bypasses configured local/private destinations. IPv6 is blocked by default.
                 </p>
                 <div class="url-box">
@@ -338,7 +340,8 @@ DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
                 </div>
                 <div class="btn-row">
                     <button class="btn btn-primary" id="qr-copy-btn" onclick="copyCurrentQRUrl()">📋 Copy URL</button>
-                    <a id="qr-hiddify-btn" href="{{HIDDIFY_FULL}}" class="btn btn-sec">⚡ 1-Click Hiddify</a>
+                    <a id="qr-nekobox-btn" href="{{NEKOBOX_FULL}}" class="btn btn-sec">⚡ 1-Click NekoBox</a>
+                    <a id="qr-hiddify-btn" href="{{HIDDIFY_FULL}}" class="btn btn-sec">📱 Hiddify</a>
                     <button class="btn btn-sec" onclick="copyText('{{SUB_B64_URL}}', 'Base64 Link copied!')">🔗 Base64 URL</button>
                     <button class="btn btn-danger" onclick="rotateToken()">🔄 Rotate Token</button>
                 </div>
@@ -355,7 +358,7 @@ DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="proto-card">
         <div>
             <div class="proto-title">🚀 Fortress-Auto-Fastest [Dynamic Balancer]</div>
-            <div class="proto-desc">Transport: Auto · Port: Auto · Real-time latency URLTest benchmarks all proxies and detours to lowest-ping route ('lowest' Balancer in Hiddify).</div>
+            <div class="proto-desc">Transport: Auto · Port: Auto · Real-time latency URLTest benchmarks all proxies and detours to lowest-ping route ('urltest' balancer in NekoBox / Sing-box / Hiddify).</div>
         </div>
         <button class="btn btn-primary" onclick="copyText('{{SUB_URL}}', 'Auto-Fastest Subscription URL copied!')">Copy Balancer</button>
     </div>
@@ -404,7 +407,7 @@ DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="proto-card">
         <div>
             <div class="proto-title">🌐 Fortress-WireGuard-TCP (wstunnel 8080) <span style="background:rgba(234,179,8,0.2);color:#facc15;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;">Desktop / CLI Only</span></div>
-            <div class="proto-desc">Transport: TCP · TLS 1.3 WebSockets (wstunnel) · Wraps WireGuard inside HTTPS WebSockets. Requires local wstunnel binary (start-wstunnel.bat); not included in mobile Hiddify JSON profile.</div>
+            <div class="proto-desc">Transport: TCP · TLS 1.3 WebSockets (wstunnel) · Wraps WireGuard inside HTTPS WebSockets. Requires local wstunnel binary (start-wstunnel.bat); not included in standard mobile JSON profile.</div>
         </div>
         <button class="btn btn-sec" onclick="copyText('{{WG_TCP}}', 'WireGuard over TCP Link copied!')">Copy Link</button>
     </div>
@@ -429,6 +432,8 @@ DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
         var trafficSubUrl = "{{SUB_TRAFFIC_URL}}";
         var fullHiddify = "{{HIDDIFY_FULL}}";
         var trafficHiddify = "{{HIDDIFY_TRAFFIC}}";
+        var fullNekobox = "{{NEKOBOX_FULL}}";
+        var trafficNekobox = "{{NEKOBOX_TRAFFIC}}";
         var currentMode = 'full';
         var qrcodeObj = null;
 
@@ -442,6 +447,8 @@ DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
             var targetUrl = isFull ? fullSubUrl : trafficSubUrl;
             document.getElementById('qr-url-text').innerText = targetUrl;
             document.getElementById('qr-hiddify-btn').href = isFull ? fullHiddify : trafficHiddify;
+            var nekoBtn = document.getElementById('qr-nekobox-btn');
+            if (nekoBtn) nekoBtn.href = isFull ? fullNekobox : trafficNekobox;
             if (qrcodeObj) {
                 qrcodeObj.clear();
                 qrcodeObj.makeCode(targetUrl);
@@ -718,6 +725,12 @@ def build_hiddify_link(subscription_url: str, label: str) -> str:
     encoded_url = urllib.parse.quote(subscription_url, safe="")
     encoded_label = urllib.parse.quote(label, safe="")
     return f"hiddify://import/{encoded_url}#{encoded_label}"
+
+def build_nekobox_link(subscription_url: str, label: str) -> str:
+    """Encode the nested URL for NekoBox / NekoRay import."""
+    encoded_url = urllib.parse.quote(subscription_url, safe="")
+    encoded_label = urllib.parse.quote(label, safe="")
+    return f"nekobox://import/{encoded_url}#{encoded_label}"
 
 def current_certificate_fingerprint():
     for directory in (RAM_DIR, DISK_DIR):
@@ -1341,6 +1354,8 @@ def render_dashboard_page(token, totp_secret, session=""):
     sub_b64_url = f"https://{host_for_sub}:{PORT}/sub/{token}/b64"
     hiddify_full = build_hiddify_link(sub_full_url, "Sovereign-Fortress-(Full-Tunnel)")
     hiddify_traffic = build_hiddify_link(sub_traffic_url, "Sovereign-Fortress-(Traffic-Only)")
+    nekobox_full = build_nekobox_link(sub_full_url, "Sovereign-Fortress-(Full-Tunnel)")
+    nekobox_traffic = build_nekobox_link(sub_traffic_url, "Sovereign-Fortress-(Traffic-Only)")
     vless, hy2_sal, hy2_std, tuic, ss, wg_native, wg_tcp = get_protocol_links()
 
     html = DASHBOARD_HTML_TEMPLATE
@@ -1354,6 +1369,8 @@ def render_dashboard_page(token, totp_secret, session=""):
     html = html.replace("{{HIDDIFY_FULL}}", hiddify_full)
     html = html.replace("{{HIDDIFY_TRAFFIC}}", hiddify_traffic)
     html = html.replace("{{HIDDIFY_PRIMARY}}", hiddify_full)
+    html = html.replace("{{NEKOBOX_FULL}}", nekobox_full)
+    html = html.replace("{{NEKOBOX_TRAFFIC}}", nekobox_traffic)
     html = html.replace("{{LOGO_SVG_HTML}}", LOGO_SVG_HTML)
     html = html.replace("{{LOGO_SVG_SM}}", LOGO_SVG_SM)
     html = html.replace("{{VLESS}}", vless)
