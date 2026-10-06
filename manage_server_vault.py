@@ -61,9 +61,9 @@ def is_tmpfs(path: Path) -> bool:
 
 def is_mounted(path: Path) -> bool:
     try:
-        out = subprocess.check_output(["findmnt", "-n", "--target", str(path)],
-                                      stderr=subprocess.DEVNULL).decode().strip()
-        return bool(out)
+        res = subprocess.run(["mountpoint", "-q", str(path)],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return res.returncode == 0
     except Exception:
         return False
 
@@ -92,7 +92,7 @@ def get_status():
                 if "cipher:" in line.lower():
                     luks_cipher = line.split(":", 1)[1].strip()
                 elif "keysize:" in line.lower():
-                    luks_cipher += f" ({line.split(':', 1)[1].strip()} bits)"
+                    luks_cipher += f" ({line.split(':', 1)[1].strip()})"
         except Exception:
             luks_cipher = "aes-xts-plain64 (512 bits)"
 
