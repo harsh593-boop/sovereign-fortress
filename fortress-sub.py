@@ -51,7 +51,7 @@ CONFIG_PATHS = [] if OFFLINE_TEST_MODE else [
 
 CONFIG = {
     "server_ip": "127.0.0.1",
-    "domain": "",
+    "domain": "fortress-portal.duckdns.org",
     "sub_port": 8443,
     "dns_port": 5335,
     "token": "",
@@ -84,7 +84,7 @@ for cp in CONFIG_PATHS:
             pass
 
 SERVER_IP = CONFIG.get("server_ip", "127.0.0.1")
-DOMAIN = CONFIG.get("domain", "")
+DOMAIN = CONFIG.get("domain", "") or "fortress-portal.duckdns.org"
 PORT = int(CONFIG.get("sub_port", 8443))
 DNS_PORT = int(CONFIG.get("dns_port", 5335))
 DNSCRYPT_PORT = int(CONFIG.get("dnscrypt_port", 5443))
@@ -259,7 +259,7 @@ DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
                 <div class="brand-icon">{{LOGO_SVG_HTML}}</div>
                 <div>
                     <h1>SOVEREIGN FORTRESS</h1>
-                    <p>Sovereign Fortress Gateway ({{SERVER_IP}}) • Runtime secrets prefer volatile RAM • Sing-box 1.11+</p>
+                    <p>Sovereign Fortress Gateway ({{DISPLAY_HOST}}) • Strict HTTPS &bull; Volatile Zero-Log Runtime &bull; Sing-box 1.11+</p>
                 </div>
             </div>
             <div class="status-pill">
@@ -809,8 +809,8 @@ def verified_private_ca():
 
 def get_protocol_links():
     quote = lambda value: urllib.parse.quote(str(value), safe="")
-    server_host = endpoint_host(SERVER_IP)
     domain_target = DOMAIN if (DOMAIN and not DOMAIN.startswith("<")) else SERVER_IP
+    server_host = endpoint_host(domain_target)
     # Hysteria pinSHA256 is a certificate fingerprint, not the SPKI pin.
     cert_fingerprint = current_certificate_fingerprint()
     pin_param = f"&pinSHA256={quote(cert_fingerprint)}" if cert_fingerprint else ""
@@ -1003,7 +1003,7 @@ def get_singbox_json_config(mode="full", core="1.11"):
             {
                 "type": "vless",
                 "tag": "Fortress-Reality-TCP",
-                "server": SERVER_IP,
+                "server": domain_target,
                 "server_port": 443,
                 "uuid": UUID,
                 "flow": "xtls-rprx-vision",
@@ -1024,7 +1024,7 @@ def get_singbox_json_config(mode="full", core="1.11"):
             {
                 "type": "hysteria2",
                 "tag": "Fortress-Hysteria2-Salamander",
-                "server": SERVER_IP,
+                "server": domain_target,
                 "server_port": 9444,
                 "password": HY2_PASSWORD,
                 "obfs": {
@@ -1036,7 +1036,7 @@ def get_singbox_json_config(mode="full", core="1.11"):
             {
                 "type": "hysteria2",
                 "tag": "Fortress-Hysteria2-Standard",
-                "server": SERVER_IP,
+                "server": domain_target,
                 "server_port": 8443,
                 "password": HY2_PASSWORD,
                 "tls": hy2_std_tls
@@ -1044,7 +1044,7 @@ def get_singbox_json_config(mode="full", core="1.11"):
             {
                 "type": "tuic",
                 "tag": "Fortress-TUIC5",
-                "server": SERVER_IP,
+                "server": domain_target,
                 "server_port": 9443,
                 "uuid": UUID,
                 "password": HY2_PASSWORD,
@@ -1054,7 +1054,7 @@ def get_singbox_json_config(mode="full", core="1.11"):
             {
                 "type": "shadowsocks",
                 "tag": "Fortress-Shadowsocks2022",
-                "server": SERVER_IP,
+                "server": domain_target,
                 "server_port": 10443,
                 "method": "2022-blake3-aes-256-gcm",
                 "password": SS_PASSWORD
@@ -1070,7 +1070,7 @@ def get_singbox_json_config(mode="full", core="1.11"):
             "private_key": WG_CLIENT_PRIV,
             "peers": [
                 {
-                    "server": SERVER_IP,
+                    "server": domain_target,
                     "server_port": 51820,
                     "public_key": WG_SERVER_PUB,
                     "allowed_ips": ["0.0.0.0/0"]
@@ -1145,6 +1145,13 @@ def get_singbox_json_config(mode="full", core="1.11"):
                 "outbound": "direct"
             }
         ])
+
+    if domain_target and domain_target != SERVER_IP:
+        rules.append({
+            "domain": [domain_target],
+            "domain_suffix": [domain_target],
+            "outbound": "direct"
+        })
 
     rules.extend([
         {
@@ -1454,7 +1461,8 @@ def render_dashboard_page(token, totp_secret, session=""):
     doh_url_vpn = f"https://10.8.0.1:8445/dns-query"
 
     html = DASHBOARD_HTML_TEMPLATE
-    html = html.replace("{{SERVER_IP}}", SERVER_IP)
+    html = html.replace("{{DISPLAY_HOST}}", domain_target)
+    html = html.replace("{{SERVER_IP}}", domain_target)
     html = html.replace("{{DOMAIN_TARGET}}", domain_target)
     html = html.replace("{{DNS_PORT}}", str(DNS_PORT))
     html = html.replace("{{DNSCRYPT_PORT}}", str(DNSCRYPT_PORT))
@@ -1498,9 +1506,11 @@ class FortressSubHandler(BaseHTTPRequestHandler):
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
         self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
         self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, private")
+        self.send_header("Pragma", "no-cache")
         super().end_headers()
 
     def json_response(self, status, obj):
@@ -1548,7 +1558,7 @@ class FortressSubHandler(BaseHTTPRequestHandler):
             self.send_header("Connection", "close")
             self.end_headers()
             return True
-        if (not is_ssl) or (DOMAIN and req_host == SERVER_IP and not (parsed.path.startswith("/sub/") or has_query_token)):
+        if (not is_ssl) or (DOMAIN and req_host and req_host.lower() == SERVER_IP.lower() and not (parsed.path.startswith("/sub/") or has_query_token)):
             redirect_url = f"https://{target_host}:{PORT}{self.path}"
             self.send_response(301)
             self.send_header("Location", redirect_url)
@@ -1771,7 +1781,9 @@ class FortressSubHandler(BaseHTTPRequestHandler):
                 return
 
             if fmt in ["wg", "wireguard"]:
-                wg_conf = f"[Interface]\nPrivateKey = {WG_CLIENT_PRIV}\nAddress = {WG_CLIENT_IP}/24\n# Configure device Private DNS/DoT separately; plain DNS is disabled on the server.\nMTU = 1360\n\n[Peer]\nPublicKey = {WG_SERVER_PUB}\nEndpoint = {SERVER_IP}:51820\nAllowedIPs = 0.0.0.0/0\nPersistentKeepalive = 15\n"
+                domain_target = DOMAIN if (DOMAIN and not DOMAIN.startswith("<")) else SERVER_IP
+                endpoint_addr = endpoint_host(domain_target)
+                wg_conf = f"[Interface]\nPrivateKey = {WG_CLIENT_PRIV}\nAddress = {WG_CLIENT_IP}/24\n# Configure device Private DNS/DoT separately; plain DNS is disabled on the server.\nMTU = 1360\n\n[Peer]\nPublicKey = {WG_SERVER_PUB}\nEndpoint = {endpoint_addr}:51820\nAllowedIPs = 0.0.0.0/0\nPersistentKeepalive = 15\n"
                 body = wg_conf.encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "text/plain; charset=utf-8")

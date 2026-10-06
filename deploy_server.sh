@@ -60,7 +60,7 @@ if [ -e /etc/fortress/fortress_config.json ] || [ -e /etc/fortress/ca.key ] || [
     echo "[-] Review migration/rotation manually; this installer is first-install only."
     exit 1
 fi
-DOMAIN="${FORTRESS_DOMAIN:-$SERVER_IP}"
+DOMAIN="${FORTRESS_DOMAIN:-fortress-portal.duckdns.org}"
 # DOMAIN is embedded in certificate/configuration heredocs. Reject values that
 # could alter those files or produce misleading subscription URLs.
 if [[ -z "$DOMAIN" || "$DOMAIN" =~ [^A-Za-z0-9._:\-\[\]] ]]; then

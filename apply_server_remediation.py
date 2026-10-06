@@ -27,23 +27,34 @@ AGH = Path('/opt/AdGuardHome/AdGuardHome.yaml')
 UNITS = ('adguard-home', 'fortress-core', 'fortress-sub', 'fortress-wstunnel')
 
 
-def ensure_dnscrypt_config(user_uid, user_gid):
+def ensure_dnscrypt_config(user_uid, user_gid, domain=None):
     persistent = DISK / 'dnscrypt.yaml'
     runtime = RAM / 'adguard' / 'dnscrypt.yaml'
+    if persistent.exists() and domain:
+        try:
+            text = persistent.read_text()
+            expected_prov = f"2.dnscrypt-cert.{domain}"
+            m = re.search(r'provider_name:\s*(.+)', text)
+            if m and m.group(1).strip() != expected_prov:
+                text = re.sub(r'provider_name:\s*.+', f'provider_name: {expected_prov}', text)
+                persistent.write_text(text)
+        except Exception:
+            pass
+
     if not persistent.exists():
-        domain = ""
+        d_name = domain or ""
         cfg_path = DISK / 'fortress_config.json'
-        if cfg_path.exists():
+        if not d_name and cfg_path.exists():
             try:
                 cfg = json.loads(cfg_path.read_text())
                 d = cfg.get('domain', '')
                 if d and not d.startswith('<'):
-                    domain = d.strip()
+                    d_name = d.strip()
                 elif cfg.get('server_ip'):
-                    domain = cfg.get('server_ip').strip()
+                    d_name = cfg.get('server_ip').strip()
             except Exception:
                 pass
-        provider_name = f"2.dnscrypt-cert.{domain}" if domain else "2.dnscrypt-cert.fortress"
+        provider_name = f"2.dnscrypt-cert.{d_name}" if d_name else "2.dnscrypt-cert.fortress"
 
         def gen_keys(alg):
             out = subprocess.check_output(['openssl', 'genpkey', '-algorithm', alg, '-text']).decode()
@@ -71,7 +82,7 @@ def ensure_dnscrypt_config(user_uid, user_gid):
     atomic_file(runtime, persistent.read_bytes(), mode=0o600, uid=user_uid, gid=user_gid)
 
 
-def harden_adguard(config):
+def harden_adguard(config, domain=None):
     c = copy.deepcopy(config)
     c.setdefault('http', {})['address'] = '127.0.0.1:3000'
     c['http']['pprof'] = {'enabled': False, 'port': 6060}
@@ -98,6 +109,8 @@ def harden_adguard(config):
                                    port_dns_over_quic=853, port_dnscrypt=5443,
                                    dnscrypt_config_file='/run/fortress/adguard/dnscrypt.yaml',
                                    allow_unencrypted_doh=False)
+    if domain:
+        c['tls']['server_name'] = domain
     c.setdefault('clients', {})['runtime_sources'] = {k: False for k in ('whois', 'arp', 'rdns', 'dhcp', 'hosts')}
     return c
 
@@ -175,6 +188,8 @@ def firewall_rules(uid):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--apply', action='store_true', help='explicitly authorize changes')
+    parser.add_argument('--domain', default='fortress-portal.duckdns.org',
+                        help='domain name to configure (default: fortress-portal.duckdns.org)')
     parser.add_argument('--subscription-script', default='fortress-sub.py',
                         help='path to updated fortress-sub.py (default: fortress-sub.py)')
     parser.add_argument('--initializer-script', default='fortress-init.sh',
@@ -200,7 +215,7 @@ def main():
     initializer = Path(args.initializer_script).read_bytes()
     compile(subscription, 'reviewed-subscription', 'exec')
     command(['bash', '-n', args.initializer_script])
-    agh = harden_adguard(yaml.safe_load(AGH.read_text()))
+    agh = harden_adguard(yaml.safe_load(AGH.read_text()), domain=args.domain)
     core = harden_core(json.loads((RAM / 'config.json').read_text()))
     # Private staging stays on tmpfs; engine errors never reach the terminal.
     staged = RAM / '.reviewed-server.json'
@@ -262,7 +277,7 @@ def main():
         os.chmod(work, 0o700)
         # Stop before writing: AGH writes its configuration during shutdown.
         command(['systemctl', 'stop', 'adguard-home'])
-        ensure_dnscrypt_config(user.pw_uid, user.pw_gid)
+        ensure_dnscrypt_config(user.pw_uid, user.pw_gid, domain=args.domain)
         subprocess.run(['chattr', '-i', str(AGH)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         atomic_file(AGH, yaml.safe_dump(agh, sort_keys=False), gid=user.pw_gid)
         # This AdGuard release rewrites config on startup: only RAM is writable.
@@ -275,6 +290,8 @@ def main():
             master = json.loads(path.read_text())
             master.pop('totp_secret', None)
             master.setdefault('portal_totp_required', False)
+            if args.domain:
+                master['domain'] = args.domain
             atomic_file(path, json.dumps(master, indent=2), mode=mode, gid=user.pw_gid)
         atomic_file('/usr/local/bin/fortress-sub.py', subscription, mode=0o755)
         atomic_file('/usr/local/bin/fortress-init.sh', initializer, mode=0o755)
