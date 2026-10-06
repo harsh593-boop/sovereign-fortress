@@ -331,15 +331,42 @@ The example deployment separates some runtime state from persistent configuratio
 * **Windows DPAPI:** `fortress_vault.py` protects explicitly selected private client files under the current user. The PowerShell wrappers delegate to that implementation. Hiddify caches, application databases, clipboard contents, memory, swap, and backups are not automatically protected by this vault.
 * **Machine & User Session Entropy**: Vault ciphertexts are cryptographically bound using secondary entropy derived from user identity, computer name, and static salt. Offline drive cloning, cold disk extraction, or rogue processes in other user sessions cannot decrypt the credentials without access to the authenticated user's Windows session. (Note: As standard with user-scoped DPAPI, processes executing within the active user logon session can unprotect vault data; it is not hardware PCR-sealed to a TPM).
 
-### 4. Server-Side Zero-Disk-Footprint Vault (`manage_server_vault.py`)
-* **AES-256-GCM Authenticated Storage:** Operators can lock all server private keys (`key.pem`, `ca.key`, `wg0.conf`, `dnscrypt.yaml`, `fortress_config.json`) into `/etc/fortress/vault.enc` using PBKDF2 with 100,000 iterations.
-* **Volatile RAM-Only Runtime:** Plaintext keys are shredded from physical disk storage using `shred -u -z` and exist solely within the `/run/fortress` volatile `tmpfs` RAM disk.
-* **Cold-Start Anti-Forensic Defense:** If the VPS is powered down or snapshotted, an adversary cannot extract private keys from the disk image without the master passphrase.
-* **Commands:**
-  * `sudo python3 manage_server_vault.py status` — Check current memory and vault state.
-  * `sudo python3 manage_server_vault.py lock` — Encrypt keys into `vault.enc` and shred plaintext from disk.
-  * `sudo python3 manage_server_vault.py unlock` — Decrypt `vault.enc` into volatile RAM and restart services.
-  * `sudo python3 manage_server_vault.py purge-ram` — Emergency memory wipe and daemon termination.
+### 4. Server-Side Cryptographic Vault & LUKS2 Storage (`manage_server_vault.py`)
+* **Dedicated 512-bit LUKS2 Hardware Encryption:** A dedicated encrypted container file (`/var/fortress.luks`, default 4 GB) formatted with LUKS2 using `aes-xts-plain64` (512-bit key) and memory-hard `Argon2id` key derivation. Mounts to `/var/fortress-storage` (ext4) to secure persistent archives, AdGuard databases, query filters, and backups at rest.
+* **Zero-Disk-Footprint Volatile RAM (`/run/fortress` `tmpfs`):** Active runtime private keys (`key.pem`, `ca.key`, `wg0.conf`, `dnscrypt.yaml`, `fortress_config.json`, `sub_token`) reside strictly in volatile RAM. All plaintext copies on physical disk are shredded using `shred -u -z -n 3` (3 random overwrite passes + zero fill + unlink).
+* **AES-256 Vault Backup Archive:** Server secrets are backed up into `/etc/fortress/vault.enc` using `aes-256-cbc` with PBKDF2 (100,000 iterations + salt).
+* **Cold-Start Anti-Forensic Defense:** If the server is powered down or a cloud snapshot is captured by hypervisor administrators, all RAM keys vanish instantly and the LUKS2 container remains locked ciphertext. Zero plaintext credentials exist on disk.
+* **CLI Management Commands:**
+  * `sudo python3 manage_server_vault.py status` — Display live LUKS2 volume, mapper device, volatile RAM tmpfs, and daemon status.
+  * `sudo python3 manage_server_vault.py setup-luks [--size 4] [--passphrase <pass>]` — Allocate, format (AES-XTS 512-bit Argon2id), and mount the dedicated LUKS2 volume.
+  * `sudo python3 manage_server_vault.py unlock [--passphrase <pass>]` — Seamlessly open the LUKS2 volume, unpack credentials directly into volatile RAM, and restart all daemons.
+  * `sudo python3 manage_server_vault.py lock [--passphrase <pass>]` — Encrypt all keys into `vault.enc` and securely shred all plaintext files from disk.
+  * `sudo python3 manage_server_vault.py purge-ram [--force]` — Emergency instantaneous cold lock: stops daemons, shreds volatile memory keys, unmounts storage, and locks the LUKS2 container.
+
+---
+
+## 🔑 Management Portal & Client Authentication
+
+The server provides a self-hosted, authenticated web portal for managing subscriptions, exporting client configurations, downloading WireGuard profiles, and viewing QR codes.
+
+### How to Access & Log In:
+1. Open the portal URL in your web browser:
+   ```text
+   https://<your-domain>:8443/portal
+   ```
+   *(e.g., `https://fortress-portal.duckdns.org:8443/portal`)*
+2. **Login Credential**: Enter your **Master Secret Subscription Bearer Token** (`ft_sec_...`).
+   * *Note: Do not use your server password or a browser-generated password.* The portal strictly verifies your high-entropy token stored on the server.
+   * To retrieve your current token from the server over SSH:
+     ```bash
+     sudo cat /var/lib/fortress/subscription/sub_token
+     ```
+3. Click **Authenticate**. Once authenticated, a secure HTTP-only cookie (`sf_session`) is established.
+
+### Perimeter Security & Host Protection:
+* **HSTS Enforced:** `max-age=31536000; includeSubDomains; preload` is active on all portal pages.
+* **Host Header Verification:** Requests directed to the raw server IP address or unauthorized hostnames are automatically rejected with `HTTP 421 Unrecognized Host`. All interactions must use your verified domain.
+* **Automated Rate-Limiting & IP Jail:** Repeated failed authentication attempts automatically trigger temporary perimeter IP blocking.
 
 ### 5. Local cleanup helper (`Shred-Fortress.ps1`)
 * The helper attempts to remove selected local files. SSD wear-leveling, snapshots, backups, and filesystem semantics mean it cannot guarantee forensic erasure.
