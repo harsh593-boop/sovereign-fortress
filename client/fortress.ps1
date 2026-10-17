@@ -10,7 +10,8 @@ After install, full/traffic/off run as a standard user: they trigger SYSTEM sche
 param(
   [Parameter(Mandatory, Position = 0)][ValidateSet('install','full','traffic','off','resume','status','uninstall')][string]$Action,
   [string]$Stage = "$env:LOCALAPPDATA\SovereignFortress\bin",
-  [switch]$Service
+  [switch]$Service,
+  [switch]$Elevated
 )
 $ErrorActionPreference = 'Stop'
 $App    = 'C:\Program Files\SovereignFortress'
@@ -21,7 +22,7 @@ $TPath  = '\SovereignFortress\'
 $FwGrp  = 'SovereignFortress'
 $Yoga   = 'C:\Program Files (x86)\YogaDNS\YogaDNS.exe'
 $Warp   = 'C:\Program Files\Cloudflare\Cloudflare WARP\warp-cli.exe'
-$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole('Administrator')
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
 function Get-Mode { (Get-Content "$Pub\mode.txt" -EA SilentlyContinue) -join '' }
 
@@ -49,7 +50,8 @@ if (-not $Service -and $Action -in 'full','traffic','off') {
 
 if (-not $isAdmin) {
   if ($Action -notin 'install','uninstall') { throw "$Action is internal (SYSTEM task only)" }
-  $a = @('-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$PSCommandPath`"",$Action,'-Stage',"`"$Stage`"")
+  if ($Elevated) { throw 'elevation failed: still not running as administrator' }   # never relaunch twice
+  $a = @('-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$PSCommandPath`"",$Action,'-Stage',"`"$Stage`"",'-Elevated')
   Start-Process powershell -Verb RunAs -Wait -ArgumentList $a
   Get-Content "$Pub\install.log" -EA SilentlyContinue | Select-Object -Last 15
   return
