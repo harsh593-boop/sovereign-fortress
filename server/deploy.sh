@@ -3,7 +3,7 @@
 # Run as root. Inputs: $SRC with the two templates; env VPS_IP, UUID, SHORT_ID, SNI. Fresh Reality keypair each run.
 set -euo pipefail
 SRC="${SRC:-/tmp/sf}"
-: "${VPS_IP:?}" "${UUID:?}" "${SHORT_ID:?}" "${SNI:=gateway.icloud.com}"
+: "${VPS_IP:?}" "${SNI:=gateway.icloud.com}"   # UUID / SHORT_ID: generated fresh when unset
 SB_VER=1.14.3
 SB_SHA=e2bdf179c15a3652955dc44867e33ca0965c9c9b91b34267dcc5a5d639a5feee
 [ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
@@ -79,6 +79,8 @@ EOF
 
 echo "[6] secrets + configs"
 install -d -m 0700 /etc/sovereign-fortress
+UUID=${UUID:-$(/usr/local/bin/sing-box generate uuid)}
+SHORT_ID=${SHORT_ID:-$(/usr/local/bin/sing-box generate rand --hex 8)}
 kp=$(/usr/local/bin/sing-box generate reality-keypair)
 PRIV=$(awk '/PrivateKey/{print $2}' <<<"$kp"); PUB=$(awk '/PublicKey/{print $2}' <<<"$kp")
 umask 077
