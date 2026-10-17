@@ -1,0 +1,37 @@
+schema_version: 34
+http:
+  address: 127.0.0.1:3001
+users: []
+dns:
+  bind_hosts:
+    - 127.0.0.1
+  port: 5353
+  upstream_dns:
+    - tls://dns.quad9.net
+    - tls://one.one.one.one
+  bootstrap_dns:
+    - 9.9.9.9
+    - 1.1.1.1
+  fallback_dns:
+    - tls://dns.quad9.net
+  upstream_mode: parallel
+  cache_size: 4194304
+  enable_dnssec: true
+  aaaa_disabled: true
+querylog:
+  enabled: false
+  file_enabled: false
+  interval: 1h
+  size_memory: 0
+  ignored: []
+statistics:
+  enabled: false
+  interval: 1h
+filtering:
+  filtering_enabled: true
+  protection_enabled: true
+filters:
+  - enabled: true
+    url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt
+    name: AdGuard DNS filter
+    id: 1

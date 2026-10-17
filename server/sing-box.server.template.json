@@ -1,0 +1,36 @@
+{
+  "log": { "level": "warn", "timestamp": true },
+  "dns": {
+    "servers": [ { "type": "udp", "tag": "agh", "server": "127.0.0.1", "server_port": 5353 } ],
+    "strategy": "ipv4_only"
+  },
+  "inbounds": [
+    {
+      "type": "vless",
+      "tag": "vless-reality",
+      "listen": "0.0.0.0",
+      "listen_port": 443,
+      "users": [ { "uuid": "@UUID@", "flow": "xtls-rprx-vision" } ],
+      "tls": {
+        "enabled": true,
+        "server_name": "@SNI@",
+        "reality": {
+          "enabled": true,
+          "handshake": { "server": "@SNI@", "server_port": 443 },
+          "private_key": "@REALITY_PRIVATE@",
+          "short_id": [ "@SHORT_ID@" ]
+        }
+      }
+    }
+  ],
+  "outbounds": [ { "type": "direct", "tag": "direct" } ],
+  "route": {
+    "default_domain_resolver": "agh",
+    "rules": [
+      { "ip_cidr": [ "127.0.0.1/32" ], "port": 5353, "outbound": "direct" },
+      { "ip_cidr": [ "127.0.0.0/8", "169.254.0.0/16" ], "action": "reject" },
+      { "ip_is_private": true, "action": "reject" }
+    ],
+    "final": "direct"
+  }
+}

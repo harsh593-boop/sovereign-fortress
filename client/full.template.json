@@ -1,0 +1,50 @@
+{
+  "log": { "level": "info", "output": "@LOG@", "timestamp": true },
+  "dns": {
+    "servers": [
+      { "type": "tcp", "tag": "vps-agh", "server": "127.0.0.1", "server_port": 5353, "detour": "proxy" }
+    ],
+    "final": "vps-agh",
+    "strategy": "ipv4_only"
+  },
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "interface_name": "fortress0",
+      "address": [ "172.19.0.1/30", "fdfe:dcba:9876::1/126" ],
+      "mtu": 1400,
+      "auto_route": true,
+      "strict_route": true,
+      "stack": "mixed"
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "vless",
+      "tag": "proxy",
+      "server": "@VPS_IP@",
+      "server_port": 443,
+      "uuid": "@UUID@",
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "tls": {
+        "enabled": true,
+        "server_name": "@SNI@",
+        "utls": { "enabled": true, "fingerprint": "chrome" },
+        "reality": { "enabled": true, "public_key": "@REALITY_PUBLIC@", "short_id": "@SHORT_ID@" }
+      }
+    },
+    { "type": "direct", "tag": "direct" }
+  ],
+  "route": {
+    "auto_detect_interface": true,
+    "rules": [
+      { "action": "sniff" },
+      { "protocol": "dns", "action": "hijack-dns" },
+      { "port": 53, "action": "hijack-dns" },
+      { "ip_version": 6, "action": "reject" }
+    ],
+    "final": "proxy"
+  }
+}
